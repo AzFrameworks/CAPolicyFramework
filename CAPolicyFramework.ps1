@@ -92,7 +92,7 @@ $Params = @{
 
 if (-not (Get-MgRoleManagementDirectoryRoleAssignment | Where-Object { ($_.PrincipalId -eq $CurrentUserId) -and ($_.RoleDefinitionId -eq "8424c6f0-a189-499e-bbd0-26c1753c96d4") })) {
     Write-Host "Creating role assignment 'Attribute Definition Administrator' for $CurrentUser..." -ForegroundColor Yellow
-    New-MgRoleManagementDirectoryRoleAssignment @Params
+    New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @Params
 } else {
     Write-Host "Role assignment 'Attribute Definition Administrator' for $CurrentUser exists already." -ForegroundColor Yellow
 }
@@ -104,7 +104,7 @@ $params = @{
 }
 if (-not (Get-MgDirectoryAttributeSet | Where-Object { $_.Id -eq "DataSensitivity" })) {
     Write-Host "Creating attribute set 'DataSensitivity'..." -ForegroundColor Yellow
-    New-MgDirectoryAttributeSet @Params
+    New-MgDirectoryAttributeSet -BodyParameter @Params
 } else {
     Write-Host "Attribute set 'DataSensitivity' exists already." -ForegroundColor Yellow
 }
@@ -143,7 +143,7 @@ $params = @{
 }
 if (-not (Get-MgDirectoryCustomSecurityAttributeDefinition | Where-Object { $_.Name -eq "Classification" })) {
     Write-Host "Creating attribute definition 'Classification'..." -ForegroundColor Yellow
-    New-MgDirectoryCustomSecurityAttributeDefinition @Params
+    New-MgDirectoryCustomSecurityAttributeDefinition -BodyParameter @Params
 } else {
     Write-Host "Attribute definistion 'Classification' exists already." -ForegroundColor Yellow
 }
