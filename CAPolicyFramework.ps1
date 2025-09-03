@@ -162,7 +162,7 @@ $PasswordProfile = @{
     ForceChangePasswordNextSignInWithMfa = $true
 }
 
-@Params = @{
+$Params = @{
     DisplayName = $BreakGlassName1
     PasswordProfile = $PasswordProfile
     UserPrincipalName = $BreakGlassUPN1
@@ -177,7 +177,7 @@ if (-not (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN1 }
     Write-Host "Break Glass User 1 exists already." -ForegroundColor Yellow
 }
 
-@Params = @{
+$Params = @{
     DisplayName = $BreakGlassName2
     PasswordProfile = $PasswordProfile
     UserPrincipalName = $BreakGlassUPN2
@@ -192,7 +192,7 @@ if (-not (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN2 }
     Write-Host "Break Glass User 2 exists already." -ForegroundColor Yellow
 }
 
-@Params = @{
+$Params = @{
 	"@odata.type" = "#microsoft.graph.unifiedRoleAssignment"
 	RoleDefinitionId = "62e90394-69f5-4237-9190-012177145e10"
 	PrincipalId = $BreakGlass1Id
@@ -205,7 +205,7 @@ if (-not (Get-MgRoleManagementDirectoryRoleAssignment | Where-Object { ($_.Princ
     Write-Host "Role assignment 'Global Administrator' for $BreakGlassName1 exists already." -ForegroundColor Yellow
 }
 
-@Params = @{
+$Params = @{
 	"@odata.type" = "#microsoft.graph.unifiedRoleAssignment"
 	RoleDefinitionId = "62e90394-69f5-4237-9190-012177145e10"
 	PrincipalId = $BreakGlass2Id
@@ -234,7 +234,7 @@ if (-not (get-MgIdentityConditionalAccessNamedLocation | Where-Object { $_.Displ
     Write-Host "Named location 'Countries allowed for admin access' exists already." -ForegroundColor Yellow
 }
 
-@params = @{
+$params = @{
     "@odata.type" = "#microsoft.graph.countryNamedLocation"
     DisplayName = "Countries allowed for CHC data access"
     CountriesAndRegions = @(
@@ -254,7 +254,7 @@ $SecureGroupName = "Secure Workstation Users"
 $SecureGroupMailName = "SecureWorkstationsUsers"
 $SecureGroupQuery = '(user.userPrincipalName -startsWith "AZADM-")'
 
-@Params = @{
+$Params = @{
     Description = $SecureGroupName
     DisplayName = $SecureGroupName
     MailEnabled = $False
@@ -288,7 +288,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS001-Block-AllApps-AllUsers-UnsupportedPlatform";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -317,7 +317,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -345,7 +345,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS003-Block-AllApps-Guests-AdminPortals";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -374,7 +374,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS004-Block-AllApps-AllUsers-LegacyAuth";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -418,7 +418,7 @@ $sessionControls = @{
     }
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -450,7 +450,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -484,7 +484,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS007-Block-AllApps-Admins-RequireCompliantDevice";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -513,7 +513,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS008-Allow-AllApps-AllUsers-RequireMFA";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -549,7 +549,7 @@ $sessionControls = @{
     }
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -586,7 +586,7 @@ $sessionControls = @{
     }
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUsers";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -618,7 +618,7 @@ $grantcontrols = @{
     }
 }
 
-@Params = @{
+$Params = @{
     DisplayName = "BAS011-Allow-AllApps-Admins-PhisingResistentMFA";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
