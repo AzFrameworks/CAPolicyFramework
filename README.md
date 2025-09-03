@@ -133,6 +133,12 @@ This policy, which mandates the use of compliant devices for all users, ensures 
 
 The reasoning behind this policy is rooted in creating a secure digital environment. Requiring compliant devices eliminates vulnerabilities posed by unmanaged and potentially compromised devices, as these may not adhere to the organization's security protocols.
 By default, each policy created from templates in Entra ID is created in report-only mode. We recommended organizations test and monitor usage, to ensure the intended result, before turning on each policy.
+
+
+**o	BAS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer**  
+(Block device code flow and authentication transfer for guest users)  
+
+This policy restricts users from utilizing device code flow and authentication transfer methods within the organization's applications. Device code flow is a method where a user initiates authentication on one device and completes it on another, commonly used in scenarios where input capabilities are limited. Authentication transfer allows a user to authenticate in one application and then use that authentication token to access another application. By blocking these methods for users, the policy aims to enhance security and prevent unauthorized access through potentially vulnerable authentication pathways, ensuring that only appropriate authentication mechanisms are used for user access.
  
 ## Data sensitivity-based Access Control
  
@@ -238,11 +244,6 @@ The reasoning behind this policy is rooted in the critical nature of privileged 
 The policy blocks access for users who hold one or more of the 28 highly privileged Entra ID roles if they are identified as having a high sign-in risk. It is designed to mitigate the severe consequences that could arise if a highly privileged role is compromised, as these roles typically have extensive access and control within the organization. By blocking access outright, the policy ensures that the risk of unauthorized actions stemming from compromised credentials is significantly reduced.  
 
 The reasoning behind this policy emphasizes the critical importance of privileged accounts and the potential impact of malicious activity. Simply applying multi-factor authentication again in such scenarios is deemed insufficient due to the elevated risks associated with these roles. Blocking access for users exhibiting high sign-in risk provides a robust safeguard against exploitation.  
-
-**o	PER006-Block-AllApps-Guests-DeviceFlowAuthenticationTransfer**  
-(Block device code flow and authentication transfer for guest users)  
-
-This policy restricts guest users from utilizing device code flow and authentication transfer methods within the organization's applications. Device code flow is a method where a user initiates authentication on one device and completes it on another, commonly used in scenarios where input capabilities are limited. Authentication transfer allows a user to authenticate in one application and then use that authentication token to access another application. By blocking these methods for guest users, the policy aims to enhance security and prevent unauthorized access through potentially vulnerable authentication pathways, ensuring that only appropriate authentication mechanisms are used for guest user access.
 
 ![Picture9](/pics/Picture9.png)  
  
