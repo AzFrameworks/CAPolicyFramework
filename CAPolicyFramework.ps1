@@ -791,6 +791,37 @@ if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName 
 
 $conditions = @{
     Applications = @{
+        includeApplications = 'All'
+    };
+    Users = @{
+        includeUsers = 'All'
+        excludeUsers = $BreakGlass1Id,$BreakGlass2Id
+    };
+    AuthenticationFlows = @{
+        transferMethods = ('deviceCodeFlow,authenticationTransfer')
+    };
+
+}
+$grantcontrols = @{
+    BuiltInControls = @('block'); 
+    Operator = 'OR'
+}
+
+$Params = @{
+    DisplayName = "BAS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer";
+    State = "EnabledForReportingButNotEnforced";
+    Conditions = $conditions;
+    GrantControls =$grantcontrols;  
+}
+if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "PAS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer" })) {
+    Write-Host "Creating policy 'AS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer'..." -ForegroundColor Yellow
+    New-MgIdentityConditionalAccessPolicy @Params
+} else {
+    Write-Host "Policy 'AS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer' exists already." -ForegroundColor Yellow
+}
+
+$conditions = @{
+    Applications = @{
         applicationFilter = @{
             mode = 'include'
             rule = 'CustomSecurityAttribute.DataSensitivity_Classification -contains "Highly Confidential" -or CustomSecurityAttribute.DataSensitivity_Classification -contains "Confidential"'
@@ -1194,35 +1225,4 @@ if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName 
     New-MgIdentityConditionalAccessPolicy @Params
 } else {
     Write-Host "Policy 'PER005-Block-AllApps-Admins-HighSignInRisk' exists already." -ForegroundColor Yellow
-}
-
-$conditions = @{
-    Applications = @{
-        includeApplications = 'All'
-    };
-    Users = @{
-        includeUsers = 'GuestsOrExternalUsers'
-        excludeUsers = $BreakGlass1Id,$BreakGlass2Id
-    };
-    AuthenticationFlows = @{
-        transferMethods = ('deviceCodeFlow,authenticationTransfer')
-    };
-
-}
-$grantcontrols = @{
-    BuiltInControls = @('block'); 
-    Operator = 'OR'
-}
-
-$Params = @{
-    DisplayName = "PER006-Block-AllApps-Guests-DeviceFlowAuthenticationTransfer";
-    State = "EnabledForReportingButNotEnforced";
-    Conditions = $conditions;
-    GrantControls =$grantcontrols;  
-}
-if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "PER006-Block-AllApps-Guests-DeviceFlowAuthenticationTransfer" })) {
-    Write-Host "Creating policy 'PER006-Block-AllApps-Guests-DeviceFlowAuthenticationTransfer'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
-} else {
-    Write-Host "Policy 'PER006-Block-AllApps-Guests-DeviceFlowAuthenticationTransfer' exists already." -ForegroundColor Yellow
 }
