@@ -162,7 +162,7 @@ $PasswordProfile = @{
     ForceChangePasswordNextSignInWithMfa = $true
 }
 
-$Params = @{
+@Params = @{
     DisplayName = $BreakGlassName1
     PasswordProfile = $PasswordProfile
     UserPrincipalName = $BreakGlassUPN1
@@ -171,13 +171,13 @@ $Params = @{
 }
 if (-not (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN1 })) {
     Write-Host "Creating Break Glass User 1..." -ForegroundColor Yellow
-    $BreakGlass1Id = (New-MgUser @Params).Id
+    $BreakGlass1Id = (New-MgUser -BodyParameter @Params).Id
 } else {
     $BreakGlass1Id = (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN1 }).Id
     Write-Host "Break Glass User 1 exists already." -ForegroundColor Yellow
 }
 
-$Params = @{
+@Params = @{
     DisplayName = $BreakGlassName2
     PasswordProfile = $PasswordProfile
     UserPrincipalName = $BreakGlassUPN2
@@ -186,13 +186,13 @@ $Params = @{
 }
 if (-not (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN2 })) {
     Write-Host "Creating Break Glass User 2..." -ForegroundColor Yellow
-    $BreakGlass2Id = (New-MgUser @Params).Id
+    $BreakGlass2Id = (New-MgUser -BodyParameter @Params).Id
 } else {
     $BreakGlass2Id = (Get-MgUser | Where-Object { $_.UserPrincipalName -eq $BreakGlassUPN2 }).Id
     Write-Host "Break Glass User 2 exists already." -ForegroundColor Yellow
 }
 
-$Params = @{
+@Params = @{
 	"@odata.type" = "#microsoft.graph.unifiedRoleAssignment"
 	RoleDefinitionId = "62e90394-69f5-4237-9190-012177145e10"
 	PrincipalId = $BreakGlass1Id
@@ -200,12 +200,12 @@ $Params = @{
 }
 if (-not (Get-MgRoleManagementDirectoryRoleAssignment | Where-Object { ($_.PrincipalId -eq $BreakGlass1Id) -and ($_.RoleDefinitionId -eq "62e90394-69f5-4237-9190-012177145e10") })) {
     Write-Host "Creating role assignment 'Global Administrator' for $BreakGlassName1..." -ForegroundColor Yellow
-    New-MgRoleManagementDirectoryRoleAssignment @Params
+    New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @Params
 } else {
     Write-Host "Role assignment 'Global Administrator' for $BreakGlassName1 exists already." -ForegroundColor Yellow
 }
 
-$Params = @{
+@Params = @{
 	"@odata.type" = "#microsoft.graph.unifiedRoleAssignment"
 	RoleDefinitionId = "62e90394-69f5-4237-9190-012177145e10"
 	PrincipalId = $BreakGlass2Id
@@ -213,12 +213,12 @@ $Params = @{
 }
 if (-not (Get-MgRoleManagementDirectoryRoleAssignment | Where-Object { ($_.PrincipalId -eq $BreakGlass2Id) -and ($_.RoleDefinitionId -eq "62e90394-69f5-4237-9190-012177145e10") })) {
     Write-Host "Creating role assignment 'Global Administrator' for $BreakGlassName2..." -ForegroundColor Yellow
-    New-MgRoleManagementDirectoryRoleAssignment @Params
+    New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @Params
 } else {
     Write-Host "Role assignment 'Global Administrator' for $BreakGlassName2 exists already." -ForegroundColor Yellow
 }
 
-$params = @{
+@params = @{
     "@odata.type" = "#microsoft.graph.countryNamedLocation"
     DisplayName = "Countries allowed for admin access"
     CountriesAndRegions = @(
@@ -229,12 +229,12 @@ $params = @{
 }
 if (-not (get-MgIdentityConditionalAccessNamedLocation | Where-Object { $_.DisplayName -eq "Countries allowed for admin access" })) {
     Write-Host "Creating named location 'Countries allowed for admin access'..." -ForegroundColor Yellow
-    $AdminAllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation @params).id
+    $AdminAllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter @params).id
 } else {
     Write-Host "Named location 'Countries allowed for admin access' exists already." -ForegroundColor Yellow
 }
 
-$params = @{
+@params = @{
     "@odata.type" = "#microsoft.graph.countryNamedLocation"
     DisplayName = "Countries allowed for CHC data access"
     CountriesAndRegions = @(
@@ -245,7 +245,7 @@ $params = @{
 }
 if (-not (get-MgIdentityConditionalAccessNamedLocation | Where-Object { $_.DisplayName -eq "Countries allowed for CHC data access" })) {
     Write-Host "Creating named location 'Countries allowed for CHC data access'..." -ForegroundColor Yellow
-    $CHCllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation @params).id
+    $CHCllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter @params).id
 } else {
     Write-Host "Named location 'Countries allowed for CHC data access' exists already." -ForegroundColor Yellow
 }
@@ -254,7 +254,7 @@ $SecureGroupName = "Secure Workstation Users"
 $SecureGroupMailName = "SecureWorkstationsUsers"
 $SecureGroupQuery = '(user.userPrincipalName -startsWith "AZADM-")'
 
-$Params = @{
+@Params = @{
     Description = $SecureGroupName
     DisplayName = $SecureGroupName
     MailEnabled = $False
@@ -264,7 +264,7 @@ $Params = @{
     MembershipRule = $SecureGroupQuery
     MembershipRuleProcessingState = 'Paused'
 }
-$SecureGroupNameId = (New-MgGroup @Params).Id
+$SecureGroupNameId = (New-MgGroup -BodyParameter @Params).Id
 Update-MgGroup -GroupId $SecureGroupNameId -MembershipRuleProcessingState "On"
 
 # Create Conditional Access policies
@@ -288,7 +288,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS001-Block-AllApps-AllUsers-UnsupportedPlatform";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -296,7 +296,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS001-Block-AllApps-AllUsers-UnsupportedPlatform" })) {
     Write-Host "Creating policy 'BAS001-Block-AllApps-AllUsers-UnsupportedPlatform'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS001-Block-AllApps-AllUsers-UnsupportedPlatform' exists already." -ForegroundColor Yellow
 }
@@ -317,15 +317,15 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
-    GrantControls =$grantcontrols;  
+    GrantControls = $grantcontrols;  
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk" })) {
     Write-Host "Creating policy 'BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk' exists already." -ForegroundColor Yellow
 }
@@ -345,7 +345,7 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS003-Block-AllApps-Guests-AdminPortals";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -353,7 +353,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS003-Block-AllApps-Guests-AdminPortals" })) {
     Write-Host "Creating policy 'BAS003-Block-AllApps-Guests-AdminPortals'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS003-Block-AllApps-Guests-AdminPortals' exists already." -ForegroundColor Yellow
 }
@@ -374,15 +374,15 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS004-Block-AllApps-AllUsers-LegacyAuth";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
-    GrantControls =$grantcontrols;  
+    GrantControls = $grantcontrols;  
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS004-Block-AllApps-AllUsers-LegacyAuth" })) {
     Write-Host "Creating policy 'BAS004-Block-AllApps-AllUsers-LegacyAuth'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS004-Block-AllApps-AllUsers-LegacyAuth exists already." -ForegroundColor Yellow
 }
@@ -418,7 +418,7 @@ $sessionControls = @{
     }
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -427,7 +427,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser" })) {
     Write-Host "Creating policy 'BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser' exists already." -ForegroundColor Yellow
 }
@@ -450,15 +450,15 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
-    GrantControls =$grantcontrols;  
+    GrantControls = $grantcontrols;  
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps" })) {
     Write-Host "Creating policy 'BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps' exists already." -ForegroundColor Yellow
 }
@@ -484,15 +484,15 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS007-Block-AllApps-Admins-RequireCompliantDevice";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
-    GrantControls =$grantcontrols;  
+    GrantControls = $grantcontrols;  
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS007-Block-AllApps-Admins-RequireCompliantDevice" })) {
     Write-Host "Creating policy 'BAS007-Block-AllApps-Admins-RequireCompliantDevice'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS007-Block-AllApps-Admins-RequireCompliantDevice' exists already." -ForegroundColor Yellow
 }
@@ -513,15 +513,15 @@ $grantcontrols = @{
     Operator = 'OR'
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS008-Allow-AllApps-AllUsers-RequireMFA";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
-    GrantControls =$grantcontrols;  
+    GrantControls = $grantcontrols;  
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS008-Allow-AllApps-AllUsers-RequireMFA" })) {
     Write-Host "Creating policy 'BAS008-Allow-AllApps-AllUsers-RequireMFA'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS008-Allow-AllApps-AllUsers-RequireMFA' exists already." -ForegroundColor Yellow
 }
@@ -549,7 +549,7 @@ $sessionControls = @{
     }
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -558,7 +558,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns" })) {
     Write-Host "Creating policy 'BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns' exists already." -ForegroundColor Yellow
 }
@@ -586,7 +586,7 @@ $sessionControls = @{
     }
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUsers";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -595,7 +595,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUsers" })) {
     Write-Host "Creating policy 'BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUsers'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUserss' exists already." -ForegroundColor Yellow
 }
@@ -618,7 +618,7 @@ $grantcontrols = @{
     }
 }
 
-$Params = @{
+@Params = @{
     DisplayName = "BAS011-Allow-AllApps-Admins-PhisingResistentMFA";
     State = "EnabledForReportingButNotEnforced";
     Conditions = $conditions;
@@ -626,7 +626,7 @@ $Params = @{
 }
 if (-not (Get-MgIdentityConditionalAccessPolicy | Where-Object { $_.DisplayName -eq "BAS011-Allow-AllApps-Admins-PhisingResistentMFA" })) {
     Write-Host "Creating policy 'BAS011-Allow-AllApps-Admins-PhisingResistentMFA'..." -ForegroundColor Yellow
-    New-MgIdentityConditionalAccessPolicy @Params
+    New-MgIdentityConditionalAccessPolicy -BodyParameter @Params
 } else {
     Write-Host "Policy 'BAS011-Allow-AllApps-Admins-PhisingResistentMFA' exists already." -ForegroundColor Yellow
 }
