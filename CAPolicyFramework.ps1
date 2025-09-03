@@ -218,7 +218,7 @@ if (-not (Get-MgRoleManagementDirectoryRoleAssignment | Where-Object { ($_.Princ
     Write-Host "Role assignment 'Global Administrator' for $BreakGlassName2 exists already." -ForegroundColor Yellow
 }
 
-@params = @{
+$params = @{
     "@odata.type" = "#microsoft.graph.countryNamedLocation"
     DisplayName = "Countries allowed for admin access"
     CountriesAndRegions = @(
