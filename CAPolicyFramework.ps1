@@ -264,7 +264,7 @@ $Params = @{
     MembershipRule = $SecureGroupQuery
     MembershipRuleProcessingState = 'Paused'
 }
-$SecureGroupNameId = (New-MgGroup -BodyParameter @Params).Id
+$SecureGroupNameId = (New-MgGroup -BodyParameter $Params).Id
 Update-MgGroup -GroupId $SecureGroupNameId -MembershipRuleProcessingState "On"
 
 # Create Conditional Access policies
