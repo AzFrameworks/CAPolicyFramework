@@ -245,7 +245,7 @@ $params = @{
 }
 if (-not (get-MgIdentityConditionalAccessNamedLocation | Where-Object { $_.DisplayName -eq "Countries allowed for CHC data access" })) {
     Write-Host "Creating named location 'Countries allowed for CHC data access'..." -ForegroundColor Yellow
-    $CHCllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter @params).id
+    $CHCllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter $params).id
 } else {
     Write-Host "Named location 'Countries allowed for CHC data access' exists already." -ForegroundColor Yellow
 }
