@@ -1,0 +1,898 @@
+#Requires -Version 5.1
+<#
+DISCLAIMER The sample scripts are not supported under any Microsoft standard support program or service.
+The sample codes are provided AS IS without warranty of any kind. Microsoft further disclaims all implied
+warranties including, without limitation, any implied warranties of merchantability or of fitness for a
+particular purpose. The entire risk arising out of the use or performance of the sample codes and documentation
+remains with you. In no event shall Microsoft, its authors, owners of this repository or anyone else involved
+in the creation, production, or delivery of the scripts be liable for any damages whatsoever (including, without
+limitation, damages for loss of business profits, business interruption, loss of business information, or other
+pecuniary loss) arising out of the use of or inability to use the sample scripts or documentation, even if
+Microsoft has been advised of the possibility of such damages.
+#>
+
+#region Helper Functions
+
+function Install-RequiredModule {
+    param([string]$Name)
+    if (-not (Get-Module -ListAvailable -Name $Name)) {
+        Write-Host "Installing module '$Name'..." -ForegroundColor Yellow
+        Install-Module -Name $Name -Force -AllowClobber
+    } else {
+        Write-Host "Module '$Name' is already installed." -ForegroundColor Green
+    }
+}
+
+function New-RandomPassword {
+    # Generates a 20-char password meeting Entra ID complexity requirements
+    $charSets = @(
+        'ABCDEFGHJKLMNPQRSTUVWXYZ'
+        'abcdefghijkmnpqrstuvwxyz'
+        '23456789'
+        '!@#$%^&*'
+    )
+    $all = $charSets -join ''
+    # Guarantee at least one character from each set, then fill the rest randomly
+    $pwd  = $charSets | ForEach-Object { $_[(Get-Random -Maximum $_.Length)] }
+    $pwd += (1..16) | ForEach-Object { $all[(Get-Random -Maximum $all.Length)] }
+    -join ($pwd | Get-Random -Count $pwd.Count)
+}
+
+# Cache of existing CA policies populated once before the policy loop to avoid N API calls
+$script:existingPolicies = $null
+
+function New-CAPolicyIfNotExists {
+    param(
+        [Parameter(Mandatory)][string]$DisplayName,
+        [Parameter(Mandatory)][hashtable]$BodyParameter
+    )
+    if ($script:existingPolicies.DisplayName -contains $DisplayName) {
+        Write-Host "CA policy '$DisplayName' already exists." -ForegroundColor Green
+        return
+    }
+    Write-Host "Creating CA policy '$DisplayName'..." -ForegroundColor Yellow
+    try {
+        New-MgIdentityConditionalAccessPolicy -BodyParameter $BodyParameter -ErrorAction Stop | Out-Null
+    } catch {
+        $errDetail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        Write-Warning "Failed to create CA policy '${DisplayName}': $errDetail"
+    }
+}
+
+#endregion
+
+#region Module Installation
+
+# NuGet is required by PowerShellGet to install modules from the Gallery
+if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing package provider 'NuGet'..." -ForegroundColor Yellow
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+} else {
+    Write-Host "Package provider 'NuGet' is already installed." -ForegroundColor Green
+}
+
+@(
+    'Microsoft.Graph.Authentication'
+    'Microsoft.Graph.Users'
+    'Microsoft.Graph.Groups'
+    'Microsoft.Graph.Identity.SignIns'
+    'Microsoft.Graph.Identity.Governance'
+    'Microsoft.Graph.Identity.DirectoryManagement'
+    'Microsoft.Graph.Applications'
+) | ForEach-Object { Install-RequiredModule -Name $_ }
+
+#endregion
+
+#region Graph Connection
+
+$permissions = @(
+    'Policy.Read.All'
+    'Policy.ReadWrite.ConditionalAccess'
+    'Application.Read.All'
+    'CustomSecAttributeDefinition.Read.All'
+    'CustomSecAttributeDefinition.ReadWrite.All'
+    'User.Read.All'
+    'User.ReadWrite.All'
+    'Group.Read.All'
+    'Group.ReadWrite.All'
+    'RoleManagement.ReadWrite.Directory'
+)
+Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Yellow
+Connect-MgGraph -Scopes $permissions -NoWelcome
+
+#endregion
+
+#region Attribute Definition Administrator Role Assignment
+
+$currentUser   = (Get-MgContext).Account
+# -UserId accepts a UPN directly and returns a single typed object; .Id works under strict mode
+$currentUserId = (Get-MgUser -UserId $currentUser).Id
+
+# Role GUID: Attribute Definition Administrator — needed to create custom security attributes below
+$attrAdminRoleId = '8424c6f0-a189-499e-bbd0-26c1753c96d4'
+
+$existingAttrRole = Get-MgRoleManagementDirectoryRoleAssignment |
+    Where-Object { $_.PrincipalId -eq $currentUserId -and $_.RoleDefinitionId -eq $attrAdminRoleId }
+
+if (-not $existingAttrRole) {
+    Write-Host "Assigning 'Attribute Definition Administrator' to $currentUser..." -ForegroundColor Yellow
+    try {
+        New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @{
+            '@odata.type'    = '#microsoft.graph.unifiedRoleAssignment'
+            RoleDefinitionId = $attrAdminRoleId
+            PrincipalId      = $currentUserId
+            DirectoryScopeId = '/'
+        } | Out-Null
+    } catch {
+        Write-Warning "Failed to assign role: $_"
+    }
+} else {
+    Write-Host "'Attribute Definition Administrator' already assigned to $currentUser." -ForegroundColor Green
+}
+
+#endregion
+
+#region Custom Security Attributes
+
+# Attribute set that groups all data classification attributes used in DLP CA policies
+if (-not (Get-MgDirectoryAttributeSet | Where-Object { $_.Id -eq 'DataSensitivity' })) {
+    Write-Host "Creating attribute set 'DataSensitivity'..." -ForegroundColor Yellow
+    try {
+        New-MgDirectoryAttributeSet -BodyParameter @{
+            Id                  = 'DataSensitivity'
+            Description         = 'Data sensitivity attribute set'
+            MaxAttributesPerSet = 25
+        } | Out-Null
+    } catch {
+        Write-Warning "Failed to create attribute set 'DataSensitivity': $_"
+    }
+} else {
+    Write-Host "Attribute set 'DataSensitivity' already exists." -ForegroundColor Green
+}
+
+# Classification attribute enables labeling apps as Confidential/HC so CA policies can target them
+if (-not (Get-MgDirectoryCustomSecurityAttributeDefinition | Where-Object { $_.Name -eq 'Classification' })) {
+    Write-Host "Creating attribute definition 'Classification'..." -ForegroundColor Yellow
+    try {
+        New-MgDirectoryCustomSecurityAttributeDefinition -BodyParameter @{
+            attributeSet            = 'DataSensitivity'
+            description             = 'Data sensitivity classifications'
+            isCollection            = $true
+            isSearchable            = $true
+            name                    = 'Classification'
+            status                  = 'Available'
+            type                    = 'String'
+            usePreDefinedValuesOnly = $true
+            allowedValues           = @(
+                @{ id = 'Highly Confidential'; isActive = $true }
+                @{ id = 'Confidential';        isActive = $true }
+                @{ id = 'General';             isActive = $true }
+                @{ id = 'Public';              isActive = $true }
+                @{ id = 'Non-Business';        isActive = $true }
+            )
+        } | Out-Null
+    } catch {
+        Write-Warning "Failed to create attribute definition 'Classification': $_"
+    }
+} else {
+    Write-Host "Attribute definition 'Classification' already exists." -ForegroundColor Green
+}
+
+#endregion
+
+#region Break Glass Accounts
+
+# Break glass accounts are excluded from every CA policy to guarantee emergency tenant access.
+# Use the tenant's primary verified domain for the UPN suffix.
+$breakGlassDomain = (Get-MgDomain | Where-Object { $_.IsDefault }).Id
+
+$bgUPN1 = "BreakGlass1@$breakGlassDomain"
+$bgUPN2 = "BreakGlass2@$breakGlassDomain"
+
+# Invoke-MgGraphRequest returns a plain PSObject from raw JSON — every field is a NoteProperty
+# string that Set-StrictMode accepts without issue. All SDK-level type adapters are bypassed.
+$breakGlass1Id = $null
+$breakGlass2Id = $null
+
+function Get-MgUserIdByUpn {
+    param([string]$Upn)
+    try {
+        $r = Invoke-MgGraphRequest -Method GET `
+                 -Uri "v1.0/users/$([System.Uri]::EscapeDataString($Upn))?`$select=id" `
+                 -OutputType PSObject -ErrorAction Stop
+        return $r.id
+    } catch {
+        # Request_ResourceNotFound (404) means user doesn't exist — not an error condition here
+        if ($_.Exception.Message -notmatch 'Request_ResourceNotFound') {
+            Write-Warning "Unexpected error looking up user '$Upn': $_"
+        }
+        return $null
+    }
+}
+
+# Helper: check soft-deleted users and emit actionable guidance
+function Resolve-SoftDeletedBgUser {
+    param([string]$Upn, [string]$Label)
+    try {
+        $del = Invoke-MgGraphRequest -Method GET `
+            -Uri "v1.0/directory/deletedItems/microsoft.graph.user?`$filter=userPrincipalName eq '$Upn'&`$select=id,userPrincipalName,deletedDateTime" `
+            -OutputType PSObject -ErrorAction Stop
+        if ($null -ne $del.value -and $del.value.Count -gt 0) {
+            $delId = $del.value[0].id
+            Write-Host "  [ACTION REQUIRED] $Label '$Upn' exists in soft-deleted state (ID: $delId)." -ForegroundColor Red
+            Write-Host "  Option A - Restore: Restore-MgDirectoryDeletedItem -DirectoryObjectId '$delId'" -ForegroundColor Yellow
+            Write-Host "  Option B - Permanent-delete then re-run: Remove-MgDirectoryDeletedItem -DirectoryObjectId '$delId'" -ForegroundColor Yellow
+        } else {
+            Write-Host "  [ACTION REQUIRED] $Label '$Upn' could not be created and was not found anywhere." -ForegroundColor Red
+            Write-Host "  Verify that the signed-in account has User.ReadWrite.All permission." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  [WARN] Could not query soft-deleted items (check Directory.Read.All permission): $_" -ForegroundColor Yellow
+    }
+}
+
+# Create or retrieve Break Glass User 1
+$breakGlass1Id = Get-MgUserIdByUpn -Upn $bgUPN1
+if ($null -eq $breakGlass1Id) {
+    $bgPassword1 = New-RandomPassword
+    Write-Host "Creating Break Glass User 1 ($bgUPN1)..." -ForegroundColor Yellow
+    Write-Host "  *** SAVE NOW - Temp password: $bgPassword1 ***" -ForegroundColor Red
+    try {
+        $r = Invoke-MgGraphRequest -Method POST -Uri 'v1.0/users' -OutputType PSObject `
+                 -Body @{
+                     displayName       = 'Break Glass User 1'
+                     userPrincipalName = $bgUPN1
+                     mailNickname      = 'BreakGlass1'
+                     accountEnabled    = $true
+                     passwordProfile   = @{
+                         password                             = $bgPassword1
+                         forceChangePasswordNextSignIn        = $true
+                         forceChangePasswordNextSignInWithMfa = $true
+                     }
+                 } -ErrorAction Stop
+        $breakGlass1Id = $r.id
+    } catch {
+        Write-Host "  [ERROR] POST failed for Break Glass User 1: $_" -ForegroundColor Red
+        # Retry GET — creation may have failed due to a conflict (account exists but was not returned initially)
+        $breakGlass1Id = Get-MgUserIdByUpn -Upn $bgUPN1
+        if ($null -eq $breakGlass1Id) {
+            Resolve-SoftDeletedBgUser -Upn $bgUPN1 -Label 'Break Glass User 1'
+        } else {
+            Write-Host "  Break Glass User 1 resolved after conflict - account already existed." -ForegroundColor Green
+        }
+    }
+} else {
+    Write-Host "Break Glass User 1 already exists." -ForegroundColor Green
+}
+
+# Create or retrieve Break Glass User 2
+$breakGlass2Id = Get-MgUserIdByUpn -Upn $bgUPN2
+if ($null -eq $breakGlass2Id) {
+    $bgPassword2 = New-RandomPassword
+    Write-Host "Creating Break Glass User 2 ($bgUPN2)..." -ForegroundColor Yellow
+    Write-Host "  *** SAVE NOW - Temp password: $bgPassword2 ***" -ForegroundColor Red
+    try {
+        $r = Invoke-MgGraphRequest -Method POST -Uri 'v1.0/users' -OutputType PSObject `
+                 -Body @{
+                     displayName       = 'Break Glass User 2'
+                     userPrincipalName = $bgUPN2
+                     mailNickname      = 'BreakGlass2'
+                     accountEnabled    = $true
+                     passwordProfile   = @{
+                         password                             = $bgPassword2
+                         forceChangePasswordNextSignIn        = $true
+                         forceChangePasswordNextSignInWithMfa = $true
+                     }
+                 } -ErrorAction Stop
+        $breakGlass2Id = $r.id
+    } catch {
+        Write-Host "  [ERROR] POST failed for Break Glass User 2: $_" -ForegroundColor Red
+        # Retry GET — creation may have failed due to a conflict (account exists but was not returned initially)
+        $breakGlass2Id = Get-MgUserIdByUpn -Upn $bgUPN2
+        if ($null -eq $breakGlass2Id) {
+            Resolve-SoftDeletedBgUser -Upn $bgUPN2 -Label 'Break Glass User 2'
+        } else {
+            Write-Host "  Break Glass User 2 resolved after conflict - account already existed." -ForegroundColor Green
+        }
+    }
+} else {
+    Write-Host "Break Glass User 2 already exists." -ForegroundColor Green
+}
+
+# Assign Global Administrator (62e90394-...) to both break glass accounts
+$globalAdminRoleId = '62e90394-69f5-4237-9190-012177145e10'
+foreach ($bgEntry in @(
+    @{ Id = $breakGlass1Id; Name = 'Break Glass User 1' }
+    @{ Id = $breakGlass2Id; Name = 'Break Glass User 2' }
+)) {
+    $hasRole = Get-MgRoleManagementDirectoryRoleAssignment |
+        Where-Object { $_.PrincipalId -eq $bgEntry.Id -and $_.RoleDefinitionId -eq $globalAdminRoleId }
+    if (-not $hasRole) {
+        Write-Host "Assigning 'Global Administrator' to $($bgEntry.Name)..." -ForegroundColor Yellow
+        try {
+            New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @{
+                '@odata.type'    = '#microsoft.graph.unifiedRoleAssignment'
+                RoleDefinitionId = $globalAdminRoleId
+                PrincipalId      = $bgEntry.Id
+                DirectoryScopeId = '/'
+            } | Out-Null
+        } catch {
+            Write-Warning "Failed to assign Global Administrator to $($bgEntry.Name): $_"
+        }
+    } else {
+        Write-Host "'Global Administrator' already assigned to $($bgEntry.Name)." -ForegroundColor Green
+    }
+}
+
+#endregion
+
+#region Named Locations
+
+# IDs must be captured in both branches — they are referenced later in DLP004 and PER003 CA policies
+
+$existingAdminLoc = Get-MgIdentityConditionalAccessNamedLocation |
+    Where-Object { $_.DisplayName -eq 'Countries allowed for admin access' }
+if (-not $existingAdminLoc) {
+    Write-Host "Creating named location 'Countries allowed for admin access'..." -ForegroundColor Yellow
+    try {
+        $adminAllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter @{
+            '@odata.type'                     = '#microsoft.graph.countryNamedLocation'
+            DisplayName                       = 'Countries allowed for admin access'
+            CountriesAndRegions               = @('US', 'CH')
+            IncludeUnknownCountriesAndRegions = $false
+        }).Id
+    } catch {
+        Write-Error "Failed to create admin allowed countries location: $_"
+    }
+} else {
+    $adminAllowedCountriesId = $existingAdminLoc.Id
+    Write-Host "Named location 'Countries allowed for admin access' already exists." -ForegroundColor Green
+}
+
+$existingChcLoc = Get-MgIdentityConditionalAccessNamedLocation |
+    Where-Object { $_.DisplayName -eq 'Countries allowed for CHC data access' }
+if (-not $existingChcLoc) {
+    Write-Host "Creating named location 'Countries allowed for CHC data access'..." -ForegroundColor Yellow
+    try {
+        $chcAllowedCountriesId = (New-MgIdentityConditionalAccessNamedLocation -BodyParameter @{
+            '@odata.type'                     = '#microsoft.graph.countryNamedLocation'
+            DisplayName                       = 'Countries allowed for CHC data access'
+            CountriesAndRegions               = @('US', 'CH')
+            IncludeUnknownCountriesAndRegions = $false
+        }).Id
+    } catch {
+        Write-Error "Failed to create CHC allowed countries location: $_"
+    }
+} else {
+    $chcAllowedCountriesId = $existingChcLoc.Id
+    Write-Host "Named location 'Countries allowed for CHC data access' already exists." -ForegroundColor Green
+}
+
+#endregion
+
+#region Secure Workstation Users Group
+
+# Dynamic group targeting AZADM-* UPNs; used in CA policies that enforce PAW/CSC device requirements
+$secureGroupName = 'Secure Workstation Users'
+
+$existingSecureGroup = Get-MgGroup -Filter "displayName eq '$secureGroupName'" -ErrorAction SilentlyContinue
+if (-not $existingSecureGroup) {
+    Write-Host "Creating dynamic group '$secureGroupName'..." -ForegroundColor Yellow
+    try {
+        $secureGroupId = (New-MgGroup -BodyParameter @{
+            Description                   = $secureGroupName
+            DisplayName                   = $secureGroupName
+            MailEnabled                   = $false
+            SecurityEnabled               = $true
+            MailNickName                  = 'SecureWorkstationsUsers'
+            GroupTypes                    = @('DynamicMembership')
+            MembershipRule                = '(user.userPrincipalName -startsWith "AZADM-")'
+            MembershipRuleProcessingState = 'On'
+        }).Id
+    } catch {
+        Write-Error "Failed to create secure workstation group: $_"
+    }
+} else {
+    $secureGroupId = $existingSecureGroup.Id
+    Write-Host "Group '$secureGroupName' already exists." -ForegroundColor Green
+}
+
+#endregion
+
+#region Conditional Access Policies
+
+# Hard stop — both IDs must be valid GUIDs before creating any policy.
+# A null ID in excludeUsers sends an empty string to the Graph API (error 1054).
+if ([string]::IsNullOrEmpty($breakGlass1Id) -or [string]::IsNullOrEmpty($breakGlass2Id)) {
+    Write-Error "Break glass user IDs could not be resolved (BG1='$breakGlass1Id' BG2='$breakGlass2Id'). Resolve the account lookup issue before creating CA policies."
+    exit 1
+}
+
+# Privileged role GUIDs shared across BAS007, BAS011, PER001, PER003, PER004, PER005.
+# See https://learn.microsoft.com/entra/identity/role-based-access-control/permissions-reference
+$adminRoleIds = @(
+    '9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3'  # Application Administrator
+    'c4e39bd9-1100-46d3-8c65-fb160da0071f'  # Authentication Administrator
+    '158c047a-c907-4556-b7ef-446551a6b5f7'  # Cloud Application Administrator
+    '7698a772-787b-4ac8-901f-60d6b08affd2'  # Cloud Device Administrator
+    'b1be1c3e-b65d-4f19-8427-f6fa0d97feb9'  # Conditional Access Administrator
+    '9360feb5-f418-4baa-8175-e2a00bac4301'  # Exchange Administrator
+    '8329153b-31d0-4727-b945-745eb3bc5f31'  # Hybrid Identity Administrator
+    '62e90394-69f5-4237-9190-012177145e10'  # Global Administrator
+    'f2ef992c-3afb-46b9-b7cf-a126ee74c451'  # Global Reader
+    'fdd7a751-b60b-444a-984c-02652fe8fa1c'  # Groups Administrator
+    '729827e3-9c14-49f7-bb1b-9608f156bbb8'  # Helpdesk Administrator
+    '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'  # Privileged Authentication Administrator
+    '3a2c62db-5318-420d-8d74-23affee5d9d5'  # Intune Administrator
+    '194ae4cb-b126-40b2-bd5b-6091b380977d'  # Identity Governance Administrator
+    'e8611ab8-c189-46e8-94e1-60213ab1f814'  # Privileged Authentication Administrator (alt)
+    '7be44c8a-adaf-4e2a-84d6-ab2649e08a13'  # Privileged Role Administrator
+    '966707d0-3269-4727-9be2-8c3a10f19b9d'  # Password Administrator
+    '5d6b6bb7-de71-4623-b4af-96380a352509'  # Security Administrator
+    '5f2222b1-57c3-48ba-8ad5-d4759f1fde6f'  # Security Operator
+    'fe930be7-5e62-47db-91af-98c3a49a38b1'  # SharePoint Administrator
+    '29232cdf-9323-42fd-ade2-1d097af3e4de'  # Exchange Administrator (alt)
+    'cf1c38e5-3621-4004-a7cb-879624dced7c'  # Compliance Administrator
+    'ecb2c6bf-0ab6-418e-bd87-7986f8d63bbe'  # Compliance Data Administrator
+    '422218e4-db15-4ef9-bbe0-8afb41546d79'  # Teams Administrator
+    '25a516ed-2fa0-40ea-a2d0-12923a21473a'  # Application Developer
+    'aaf43236-0c0d-4d5f-883a-6955382ac081'  # Knowledge Administrator
+    'be2f45a1-457d-42af-a067-6ec1fa63bc45'  # External ID User Flow Administrator
+    '59d46f88-662b-457b-bceb-5c3809e5908f'  # External ID Attribute Administrator
+)
+
+# Retrieve all existing CA policies once to avoid a separate API call per policy
+$script:existingPolicies = Get-MgIdentityConditionalAccessPolicy -All
+
+Write-Host "`nDeploying Conditional Access policies..." -ForegroundColor Cyan
+
+# BAS001 — Block legacy auth protocols (EAS, basic auth) which cannot satisfy MFA
+New-CAPolicyIfNotExists -DisplayName 'BAS-001-2606-Block-AllResources-AllUsers-LegacyAuth' -BodyParameter @{
+    DisplayName   = 'BAS-001-2606-Block-AllResources-AllUsers-LegacyAuth'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications   = @{ includeApplications = 'All' }
+        Users          = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        clientAppTypes = @('exchangeActiveSync', 'other')
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# BAS002 — Require MFA for all users; excludes Directory Sync accounts (d29b2b05-...) which cannot do MFA
+New-CAPolicyIfNotExists -DisplayName 'BAS-002-2606-Allow-AllResources-AllUsers-RequireMFA' -BodyParameter @{
+    DisplayName   = 'BAS-002-2606-Allow-AllResources-AllUsers-RequireMFA'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{
+            includeUsers = 'All'
+            excludeUsers = @($breakGlass1Id, $breakGlass2Id)
+            excludeRoles = 'd29b2b05-8046-44ba-8758-1e26182fcf32'  # Directory Synchronization Accounts
+        }
+    }
+    GrantControls = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
+}
+
+# BAS003 — Block any platform not in the explicit allowlist (e.g., ChromeOS, unknown OS)
+New-CAPolicyIfNotExists -DisplayName 'BAS-003-2606-Block-AllResources-AllUsers-UnsupportedPlatform' -BodyParameter @{
+    DisplayName   = 'BAS-003-2606-Block-AllResources-AllUsers-UnsupportedPlatform'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Platforms    = @{
+            includePlatforms = @('all')
+            excludePlatforms = @('android', 'iOS', 'windowsPhone', 'windows', 'macOS', 'linux')
+        }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# BAS004 — Enforce short session lifetime and no persistent browser for unmanaged/non-compliant devices
+New-CAPolicyIfNotExists -DisplayName 'BAS-004-2606-Allow-AllResources-AllUsers-NoPersistentBrowser' -BodyParameter @{
+    DisplayName     = 'BAS-004-2606-Allow-AllResources-AllUsers-NoPersistentBrowser'
+    State           = 'EnabledForReportingButNotEnforced'
+    Conditions      = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Devices      = @{
+            deviceFilter = @{
+                mode = 'include'
+                rule = 'device.trustType -ne "ServerAD" -or device.isCompliant -ne True'
+            }
+        }
+    }
+    GrantControls   = @{ Operator = 'OR' }
+    SessionControls = @{
+        persistentBrowser = @{ mode = 'never'; isEnabled = $true }
+        signInFrequency   = @{ value = 1; type = 'hours'; isEnabled = $true }
+    }
+}
+
+# BAS005 — Step-up MFA every sign-in when Identity Protection detects a high-risk sign-in
+New-CAPolicyIfNotExists -DisplayName 'BAS-005-2606-Allow-AllResources-AllUsers-MFAforRiskySignIns' -BodyParameter @{
+    DisplayName     = 'BAS-005-2606-Allow-AllResources-AllUsers-MFAforRiskySignIns'
+    State           = 'EnabledForReportingButNotEnforced'
+    Conditions      = @{
+        Applications     = @{ includeApplications = 'All' }
+        Users            = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        signInRiskLevels = @('high')
+    }
+    GrantControls   = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
+    SessionControls = @{
+        signInFrequency = @{
+            authenticationType = 'primaryAndSecondaryAuthentication'
+            frequencyInterval  = 'everyTime'
+            isEnabled          = $true
+        }
+    }
+}
+
+# BAS006 — Force MFA + password change for users flagged as high user risk
+# passwordChange remediates the risk itself; signInFrequency=everyTime is not valid with userRiskLevels
+New-CAPolicyIfNotExists -DisplayName 'BAS-006-2606-Allow-AllResources-AllUsers-PasswordChangeForHighRiskUsers' -BodyParameter @{
+    DisplayName   = 'BAS-006-2606-Allow-AllResources-AllUsers-PasswordChangeForHighRiskUsers'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications   = @{ includeApplications = 'All' }
+        Users          = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        userRiskLevels = @('high')
+    }
+    GrantControls = @{ BuiltInControls = @('mfa', 'passwordChange'); Operator = 'AND' }
+}
+
+# BAS007 — Block all standard users (not guests, handled by PER policies) on non-compliant devices
+New-CAPolicyIfNotExists -DisplayName 'BAS-007-2606-Block-AllResources-AllUsers-RequireCompliantDevice' -BodyParameter @{
+    DisplayName   = 'BAS-007-2606-Block-AllResources-AllUsers-RequireCompliantDevice'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{
+            includeUsers = 'All'
+            excludeUsers = @($breakGlass1Id, $breakGlass2Id, 'GuestsOrExternalUsers')
+        }
+        Devices      = @{ deviceFilter = @{ mode = 'exclude'; rule = 'device.isCompliant -eq True' } }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# BAS008 — Block device code flow and authentication transfer to prevent token hijacking via these flows
+New-CAPolicyIfNotExists -DisplayName 'BAS-008-2606-Block-AllResources-AllUsers-DeviceFlowAuthenticationTransfer' -BodyParameter @{
+    DisplayName   = 'BAS-008-2606-Block-AllResources-AllUsers-DeviceFlowAuthenticationTransfer'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications        = @{ includeApplications = 'All' }
+        Users               = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        AuthenticationFlows = @{ transferMethods = 'deviceCodeFlow,authenticationTransfer' }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# BAS009 — Block O365 for users with an elevated Insider Risk score (Purview integration)
+New-CAPolicyIfNotExists -DisplayName 'BAS-009-2606-Block-O365Apps-AllUsers-ElevatedInsiderRisk' -BodyParameter @{
+    DisplayName   = 'BAS-009-2606-Block-O365Apps-AllUsers-ElevatedInsiderRisk'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications      = @{ includeApplications = 'Office365' }
+        Users             = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        InsiderRiskLevels = 'elevated'
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# BAS010 — Application Enforced Restrictions for Office 365 so SharePoint/Exchange honour CA app control
+New-CAPolicyIfNotExists -DisplayName 'BAS-010-2606-Allow-O365-AllUsers-ApplicationEnforcedRestrictions' -BodyParameter @{
+    DisplayName     = 'BAS-010-2606-Allow-O365-AllUsers-ApplicationEnforcedRestrictions'
+    State           = 'EnabledForReportingButNotEnforced'
+    Conditions      = @{
+        Applications   = @{ includeApplications = @('Office365') }
+        Users          = @{ includeUsers = @('All'); excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        clientAppTypes = @('all')
+    }
+    SessionControls = @{
+        applicationEnforcedRestrictions = @{ isEnabled = $true }
+    }
+}
+
+# BAS011 — Require MFA to register security info from untrusted networks (prevents attacker-controlled registration)
+New-CAPolicyIfNotExists -DisplayName 'BAS-011-2606-Allow-AllResources-AllUsers-SecureSecurityInfoRegistration' -BodyParameter @{
+    DisplayName   = 'BAS-011-2606-Allow-AllResources-AllUsers-SecureSecurityInfoRegistration'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeUserActions = 'urn:user:registersecurityinfo' }
+        Users        = @{
+            includeUsers = 'All'
+            excludeUsers = @($breakGlass1Id, $breakGlass2Id, 'GuestsOrExternalUsers')
+            excludeRoles = '62e90394-69f5-4237-9190-012177145e10'  # Global Admins manage this policy; exclude to avoid lockout
+        }
+        Locations    = @{ includeLocations = 'All'; excludeLocations = 'AllTrusted' }
+    }
+    GrantControls = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
+}
+
+# BAS012 — Enable SharePoint/OneDrive app-enforced restrictions for O365; limits download on unmanaged devices
+New-CAPolicyIfNotExists -DisplayName 'BAS-012-2606-Allow-O365Apps-AllUsers-ApplicationEnforcedRestrictions' -BodyParameter @{
+    DisplayName     = 'BAS-012-2606-Allow-O365Apps-AllUsers-ApplicationEnforcedRestrictions'
+    State           = 'EnabledForReportingButNotEnforced'
+    Conditions      = @{
+        Applications = @{ includeApplications = 'Office365' }
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+    }
+    GrantControls   = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
+    SessionControls = @{ applicationEnforcedRestrictions = @{ isEnabled = $true } }
+}
+
+
+# Reusable app filter for apps tagged Highly Confidential or Confidential via custom security attribute
+$chcAppFilter = @{
+    applicationFilter = @{
+        mode = 'include'
+        rule = 'CustomSecurityAttribute.DataSensitivity_Classification -contains "Highly Confidential" -or CustomSecurityAttribute.DataSensitivity_Classification -contains "Confidential"'
+    }
+}
+
+# DLP001 — Require phishing-resistant MFA to access CHC-classified apps (stronger than BAS002)
+New-CAPolicyIfNotExists -DisplayName 'DLP-001-2606-Allow-AllApps-AllUsers-PhishingResistantMFAforCHCData' -BodyParameter @{
+    DisplayName   = 'DLP-001-2606-Allow-AllApps-AllUsers-PhishingResistantMFAforCHCData'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = $chcAppFilter
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+    }
+    GrantControls = @{
+        Operator               = 'OR'
+        authenticationStrength = @{ id = '00000000-0000-0000-0000-000000000004' }
+    }
+}
+
+# DLP002 — Require device with extensionAttribute1=CSC and compliance for CHC-classified apps
+New-CAPolicyIfNotExists -DisplayName 'DLP-002-2606-Block-AllApps-AllUsers-RequireCompliantSecureDeviceforCHCData' -BodyParameter @{
+    DisplayName   = 'DLP-002-2606-Block-AllApps-AllUsers-RequireCompliantSecureDeviceforCHCData'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = $chcAppFilter
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Devices      = @{
+            deviceFilter = @{
+                mode = 'exclude'
+                rule = 'device.extensionAttribute1 -eq "CSC" -and device.isCompliant -eq True'
+            }
+        }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# DLP003 — Restrict CHC-classified app access to allowed countries only (data sovereignty enforcement)
+New-CAPolicyIfNotExists -DisplayName 'DLP-003-2606-Block-AllApps-AllUsers-AllowSpecificCountriesOnlyForCHCData' -BodyParameter @{
+    DisplayName   = 'DLP-003-2606-Block-AllApps-AllUsers-AllowSpecificCountriesOnlyForCHCData'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = $chcAppFilter
+        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Locations    = @{ includeLocations = 'All'; excludeLocations = $chcAllowedCountriesId }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# DLP004 — Guests have no legitimate need to access Confidential/HC-classified applications
+New-CAPolicyIfNotExists -DisplayName 'DLP-004-2606-Block-AllApps-Guests-AccessToCHCData' -BodyParameter @{
+    DisplayName   = 'DLP-004-2606-Block-AllApps-Guests-BlockAccessToCHCData'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = $chcAppFilter
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER001 — Require phishing-resistant MFA (FIDO2/WHfB) for all admin roles and secure workstation users
+New-CAPolicyIfNotExists -DisplayName 'PER-001-2606-Allow-AllApps-Admins-PhishingResistantMFA' -BodyParameter @{
+    DisplayName   = 'PER-001-2606-Allow-AllApps-Admins-PhishingResistantMFA'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{
+            excludeUsers  = @($breakGlass1Id, $breakGlass2Id)
+            includeGroups = @($secureGroupId)
+            includeRoles  = $adminRoleIds
+        }
+    }
+    GrantControls = @{
+        Operator               = 'OR'
+        authenticationStrength = @{ id = '00000000-0000-0000-0000-000000000004' }  # Built-in phishing-resistant strength
+    }
+}
+
+# PER002 — Admin sign-ins are only allowed from approved countries; excludes device/enrollment flows that must work globally
+New-CAPolicyIfNotExists -DisplayName 'PER-002-2606-Block-AllApps-Admins-AllowSpecificCountriesOnly' -BodyParameter @{
+    DisplayName   = 'PER-002-2606-Block-AllApps-Admins-AllowSpecificCountriesOnly'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{
+            includeApplications = 'All'
+            excludeApplications = @(
+                '0af06dc6-e4b5-4f28-818e-e78e62d137a5'  # Azure Virtual Desktop
+                '9cdead84-a844-4324-93f2-b2e6bb768d07'  # Device Registration Service
+                'a4a365df-50f1-4397-bc59-1a1564b8bb9c'  # Microsoft Intune Enrollment
+                '270efc09-cd0d-444b-a71f-39af4910ec45'  # Windows Hello for Business Provisioning
+            )
+        }
+        Users        = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Locations    = @{ includeLocations = 'All'; excludeLocations = $adminAllowedCountriesId }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER003 — Block admin sign-in when Identity Protection signals a high sign-in risk score
+New-CAPolicyIfNotExists -DisplayName 'PER-003-2606-Block-AllApps-Admins-HighSignInRisk' -BodyParameter @{
+    DisplayName   = 'PER-003-2606-Block-AllApps-Admins-HighSignInRisk'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications     = @{ includeApplications = 'All' }
+        Users            = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        signInRiskLevels = @('high')
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER004 — Block admin sign-in when the user account itself is flagged as high risk (compromised credentials)
+New-CAPolicyIfNotExists -DisplayName 'PER-004-2606-Block-AllApps-Admins-HighUserRisk' -BodyParameter @{
+    DisplayName   = 'PER-004-2606-Block-AllApps-Admins-HighUserRisk'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications   = @{ includeApplications = 'All' }
+        Users          = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        userRiskLevels = @('high')
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER005 — Block admin roles from signing in on any non-compliant device
+New-CAPolicyIfNotExists -DisplayName 'PER-005-2606-Block-AllApps-Admins-RequireCompliantDevice' -BodyParameter @{
+    DisplayName   = 'PER-005-2606-Block-AllApps-Admins-RequireCompliantDevice'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Devices      = @{ deviceFilter = @{ mode = 'exclude'; rule = 'device.isCompliant -eq True' } }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER006 — Admins and secure workstation users must use a PAW (extensionAttribute1=PAW) that is compliant
+New-CAPolicyIfNotExists -DisplayName 'PER-006-2606-Block-AllApps-Admins-RequireSecureCompliantDevice' -BodyParameter @{
+    DisplayName   = 'PER-006-2606-Block-AllApps-Admins-RequireSecureCompliantDevice'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'All' }
+        Users        = @{
+            excludeUsers  = @($breakGlass1Id, $breakGlass2Id)
+            includeGroups = @($secureGroupId)
+            includeRoles  = $adminRoleIds
+        }
+        Devices      = @{
+            deviceFilter = @{
+                mode = 'exclude'
+                rule = 'device.extensionAttribute1 -eq "PAW" -and device.isCompliant -eq True'
+            }
+        }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER007 — Block service principals with high Identity Protection risk (workload identity policy).
+# includeAgentIdServicePrincipals was retired when CAforAgentID went GA (May/Jun 2026).
+# The GA workload identity structure uses clientApplications.includeServicePrincipals.
+# No Users condition — its presence makes a policy "user-based" and disallows servicePrincipalRiskLevels.
+$per007Name = 'PER-007-2606-Block-AllApps-Agents-HighRisk'
+if ($script:existingPolicies.DisplayName -contains $per007Name) {
+    Write-Host "  Skipping (already exists): $per007Name" -ForegroundColor DarkGray
+} else {
+    try {
+        Invoke-MgGraphRequest -Method POST -Uri 'beta/identity/conditionalAccess/policies' `
+            -OutputType PSObject -ErrorAction Stop -Body @{
+                displayName   = $per007Name
+                state         = 'EnabledForReportingButNotEnforced'
+                conditions    = @{
+                    applications               = @{ includeApplications = @('All') }
+                    servicePrincipalRiskLevels = @('high')
+                    clientApplications         = @{
+                        includeServicePrincipals = @('ServicePrincipalsInMyTenant')
+                        excludeServicePrincipals = @()
+                    }
+                }
+                grantControls = @{ builtInControls = @('block'); operator = 'OR' }
+            } | Out-Null
+        Write-Host "  Created: $per007Name" -ForegroundColor Green
+    } catch {
+        if ($_ -match '1149') {
+            Write-Host "  [SKIP] $per007Name requires Microsoft Entra Workload Identities Premium license." -ForegroundColor Yellow
+            Write-Host "         Assign the license (Entra Workload ID Premium) to the tenant and re-run to create this policy." -ForegroundColor Yellow
+        } else {
+            Write-Warning "Failed to create ${per007Name}: $_"
+        }
+    }
+}
+
+# PER008 — Block users with high sign-in risk when acting through AI agent delegation.
+# agents.includeAgentUsers is PrivatePreview:CAAgentContext (available until Aug 2026 deprecation).
+# If the tenant is not enrolled in that preview the API returns 400; the catch block creates
+# the policy without the agents scope so deployment is not blocked.
+$per008Name = 'PER-008-2606-BlockAllApps-AgentUsers-HighRisk'
+if ($script:existingPolicies.DisplayName -contains $per008Name) {
+    Write-Host "  Skipping (already exists): $per008Name" -ForegroundColor DarkGray
+} else {
+    $per008Body = @{
+        displayName   = $per008Name
+        state         = 'EnabledForReportingButNotEnforced'
+        conditions    = @{
+            applications     = @{ includeApplications = @('All') }
+            users            = @{
+                includeUsers = @('All')
+                excludeUsers = @($breakGlass1Id, $breakGlass2Id)
+            }
+            clientAppTypes   = @('all')
+            signInRiskLevels = @('high')
+            agents           = @{
+                includeAgentUsers = @('All')
+                excludeAgentUsers = @()
+            }
+        }
+        grantControls = @{ builtInControls = @('block'); operator = 'OR' }
+    }
+    try {
+        Invoke-MgGraphRequest -Method POST -Uri 'beta/identity/conditionalAccess/policies' `
+            -OutputType PSObject -ErrorAction Stop -Body $per008Body | Out-Null
+        Write-Host "  Created: $per008Name (with agents scope)" -ForegroundColor Green
+    } catch {
+        # 1263 = Users condition not allowed in agent user policy type (PrivatePreview:CAAgentContext not enrolled)
+        # 1149 = Workload Identities Premium license required
+        if ($_ -match '1263') {
+            Write-Host "  [WARN] ${per008Name}: 'agents' condition requires PrivatePreview:CAAgentContext enrollment (not active in this tenant)." -ForegroundColor Yellow
+            Write-Host "         Falling back to sign-in risk policy without agents scope." -ForegroundColor Yellow
+        } elseif ($_ -match '1149') {
+            Write-Host "  [SKIP] $per008Name requires Microsoft Entra Workload Identities Premium license." -ForegroundColor Yellow
+            Write-Host "         Assign the license and re-run to create this policy." -ForegroundColor Yellow
+            return
+        } else {
+            Write-Host "  [WARN] ${per008Name}: unexpected error creating with agents scope - falling back. Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+        $per008Body.conditions.Remove('agents')
+        try {
+            Invoke-MgGraphRequest -Method POST -Uri 'beta/identity/conditionalAccess/policies' `
+                -OutputType PSObject -ErrorAction Stop -Body $per008Body | Out-Null
+            Write-Host "  Created: $per008Name (sign-in risk only, no agents scope)" -ForegroundColor Green
+        } catch {
+            Write-Warning "Failed to create ${per008Name}: $($_.Exception.Message)"
+        }
+    }
+}
+
+# PER009 — External users may only use the approved VDI app (0af06dc6-...); all other apps are blocked
+New-CAPolicyIfNotExists -DisplayName 'PER-009-2606-Block-AllApps-Externals-RequireCompliantSecureVDI' -BodyParameter @{
+    DisplayName   = 'PER-009-2606-Block-AllApps-Externals-RequireCompliantSecureVDI'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{
+            includeApplications = 'All'
+            excludeApplications = @('0af06dc6-e4b5-4f28-818e-e78e62d137a5')  # Approved VDI/AVD application
+        }
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+# PER010 — Prevent guests from reaching any Microsoft Admin Portal (Azure, M365, Intune, etc.)
+New-CAPolicyIfNotExists -DisplayName 'PER-010-2606-Block-AdminPortals-Guests-AdminPortals' -BodyParameter @{
+    DisplayName   = 'PER-010-2606-Block-AdminPortals-Guests-AdminPortals'
+    State         = 'EnabledForReportingButNotEnforced'
+    Conditions    = @{
+        Applications = @{ includeApplications = 'MicrosoftAdminPortals' }
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+    }
+    GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
+}
+
+#endregion
+
+Write-Host "CA Policy Framework deployment complete." -ForegroundColor Cyan
