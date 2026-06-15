@@ -12,7 +12,7 @@ A well-planned Conditional Access deployment is essential for implementing an or
 
 Microsoft Entra Conditional Access uses signals such as identity, device, and location to make automated access decisions and enforce policies aligned with organizational requirements. These policies can require controls such as multifactor authentication (MFA), prompting users only when needed to strengthen security while preserving a smooth user experience.
 
-![Picture1](/pics/Picture1.png)
+![Picture1](/pics/EUD_Conditional_Access_Signals_Diagram_preview.png)
  
 This document presents a baseline Conditional Access policy framework based on recommended Microsoft Entra templates and extended with additional policies for privileged administrative activities and sensitive data access. It is intended as a starting point for broad implementation across all users. Organizations will typically customize the framework and add further policies to meet specific requirements, and not every policy will be enabled in every environment from the outset.
 
