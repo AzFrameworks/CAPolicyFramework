@@ -182,10 +182,12 @@ In Microsoft Entra, workload identities are applications, service principals, ma
 (Allow privileged role admin access only from specific countries/locations)
 
 **Description:** Limits privileged administrator sign-ins to trusted geographic locations. The script creates a named location, “Countries allowed for admin access,” with the United States and Switzerland as default examples. Sign-ins from outside those countries are blocked, while required services such as Azure AD device registration or Intune enrollment can remain globally accessible. This reduces the risk of unauthorized administrative access from unexpected regions.
+
 **o PER-003-2606-Block-AllApps-Admins-HighSignInRisk**
 (Block privileged role users with high sign-in risk)
 
 **Description:** Blocks sign-ins by privileged role users when Microsoft Entra ID Protection identifies high sign-in risk. For privileged accounts, the policy denies access rather than allowing MFA remediation, because compromised administrative credentials can have significant impact. This helps stop suspicious administrative sign-ins before access to critical systems is granted.
+
 **o PER-004-2606-Block-AllApps-Admins-HighUserRisk**
 (Block privileged role users with high user risk)
 
@@ -208,14 +210,17 @@ In Microsoft Entra, workload identities are applications, service principals, ma
 (Allow privileged role admin access only from specific countries/locations)
 
 **Description:** Limits privileged administrator sign-ins to trusted geographic locations. The script creates a named location, “Countries allowed for admin access,” with the United States and Switzerland as default examples. Sign-ins from outside those countries are blocked, while required services such as Azure AD device registration or Intune enrollment can remain globally accessible. This reduces the risk of unauthorized administrative access from unexpected regions.
+
 **o PER-003-2606-Block-AllApps-Admins-HighSignInRisk**
 (Block privileged role users with high sign-in risk)
 
 **Description:** Blocks sign-ins by privileged role users when Microsoft Entra ID Protection identifies high sign-in risk. For privileged accounts, the policy denies access rather than allowing MFA remediation, because compromised administrative credentials can have significant impact. This helps stop suspicious administrative sign-ins before access to critical systems is granted.
+
 **o PER-004-2606-Block-AllApps-Admins-HighUserRisk**
 (Block privileged role users with high user risk)
 
 **Description:** Blocks privileged role users when Microsoft Entra ID Protection marks their account as high user risk, indicating likely compromise. Unlike standard users, who may be required to reset their password, privileged users are blocked until an administrator remediates the risk. This prevents potentially compromised administrative accounts from being used for high-impact actions.
+
 **o PER-005-2606-Block-AllApps-Admins-RequireCompliantDevice**
 (Require compliant device for privileged role user access)
 
