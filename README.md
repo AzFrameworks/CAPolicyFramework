@@ -94,6 +94,7 @@ The following baseline policies provide a core set of controls for protecting al
 (Block access to Microsoft 365 apps for users flagged with elevated insider risk)
 
 **Description:** Blocks access to Microsoft 365 applications when Microsoft Purview Insider Risk Management identifies a user with an elevated insider risk score. Insider risk signals can be used in Conditional Access decisions to restrict access when anomalous or risky activity is detected. This gives security teams time to investigate or require additional controls before normal access resumes. Prerequisite: Microsoft Purview Insider Risk Management must be enabled to generate the required risk signals.
+
 **o BAS-010-2606-Allow-O365-AllUsers-ApplicationEnforcedRestrictions**
 (Use application-enforced restrictions for Office 365 on unmanaged devices)
 
