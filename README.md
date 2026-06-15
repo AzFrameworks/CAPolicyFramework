@@ -62,10 +62,10 @@ Microsoft recommends that organizations block authentication requests using lega
 
 Protect user access on unmanaged devices by preventing browser sessions from remaining signed in after the browser is closed and setting a sign-in frequency to 1 hour.
 
-**o	BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps**  
+~~**o	DEPRECATED - BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps**  
 (Require approved client apps or app protection policies)
 
-People regularly use their mobile devices for both personal and work tasks. While making sure staff can be productive, organizations also want to prevent data loss from applications on devices they may not manage fully. With Conditional Access, organizations can restrict access to approved (modern authentication capable) client apps with Intune app protection policies. For older client apps that may not support app protection policies, administrators can restrict access to approved client apps.
+People regularly use their mobile devices for both personal and work tasks. While making sure staff can be productive, organizations also want to prevent data loss from applications on devices they may not manage fully. With Conditional Access, organizations can restrict access to approved (modern authentication capable) client apps with Intune app protection policies. For older client apps that may not support app protection policies, administrators can restrict access to approved client apps.~~
 
 **o	BAS007-Block-AllApps-Admins-RequireCompliantDevice**  
 (Require compliant device for administrators)
