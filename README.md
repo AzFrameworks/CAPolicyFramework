@@ -32,7 +32,7 @@ Exclude break-glass emergency access accounts and directory synchronization acco
 
 The following baseline policies provide a core set of controls for protecting all users and sign-ins. They appear in the same order in which the deployment script creates them.
 
-![Picture4](/pics/Picture4.png) 
+![Picture4](/pics/Common_Baseline_Policies_for_Conditional_Access_Updated_preview.png) 
  
 **o BAS-001-2606-Block-AllResources-AllUsers-LegacyAuth**
 (Block legacy authentication protocols that cannot enforce MFA)
