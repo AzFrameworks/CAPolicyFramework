@@ -118,36 +118,29 @@ The following baseline policies provide a core set of controls for protecting al
  
 ![Picture6](/pics/Picture6.png) 
 
-To access Confidential and Highly Confidential applications, we recommend the following policies:  
+To protect applications that handle Confidential or Highly Confidential data, the framework includes policies based on application-specific attributes. These policies use a custom DataSensitivity attribute set, including a Classification attribute with values such as “Confidential” and “Highly Confidential.” Conditional Access filters for applications with these attributes and applies stricter controls.  
 
-**o	DLP001-Block-AllApps-AllUsers-RequireCompliantSecureDeviceforCHCData**  
-(Require compliant and secure access workstation for confidential and highly confidential data)  
+**o DLP-001-2606-Allow-AllApps-AllUsers-PhishingResistantMFAforCHCData**
+(Require phishing-resistant MFA for confidential & highly confidential data access)
 
-This policy ensures secure access to confidential and highly confidential data by requiring compliant and secure workstations. The reasoning behind this approach lies in minimizing the risk of unauthorized access and safeguarding sensitive information within controlled environments. By mandating workstations that adhere to strict security protocols, it reduces vulnerabilities posed by devices that may lack adequate protections or contain unauthorized software.  
+**Description:** Requires phishing-resistant MFA, such as FIDO2 security keys, certificate-based authentication, or Windows Hello for Business, when users access applications tagged as Confidential or Highly Confidential. This protects sensitive applications even if a password or weaker MFA method is compromised through phishing. The control helps reduce unauthorized access to high-value assets.
 
-Prerequisites for implementing this policy include the availability of secure workstations specifically configured to limit the number and type of applications installed. These workstations must be tailored to handle sensitive data exclusively, excluding potentially risky components such as email clients. Additionally, organizations must ensure the proper configuration and maintenance of these workstations to guarantee their effectiveness in protecting critical resources.  
+**o DLP-002-2606-Block-AllApps-AllUsers-RequireCompliantSecureDeviceforCHCData**
+(Require compliant, secure workstation for confidential & highly confidential data)
 
-**o	DLP002-Allow-AllApps-AllUsers-PhisingResistantMFAforCHCData**  
-(Require phising-resistent MFA for confidential and highly confidential data)  
+**Description:** Blocks access to Confidential or Highly Confidential applications from devices that are not fully managed and specially secured. The policy uses device filters, such as a corporate secure client attribute, together with compliance state so that only approved secure endpoints can access sensitive data. This helps ensure that high-sensitivity data is accessed only from hardened and monitored devices, such as Privileged Access Workstations. Prerequisite: Establish a reliable method to identify secure devices, such as Intune compliance policies, directory extension attributes, or dedicated device groups.
 
-This policy mandates the use of phishing-resistant multi-factor authentication (MFA) for accessing confidential and highly confidential data. It ensures that users provide multiple secure forms of verification, such as hardware tokens, which are challenging for attackers to compromise.  
+**o DLP-003-2606-Block-AllApps-AllUsers-AllowSpecificCountriesOnlyForCHCData**
+(Allow access to CHC data only from specific countries/regions)
 
-The reasoning behind this approach lies in minimizing the risks associated with phishing attacks. By requiring advanced authentication mechanisms, the policy significantly reduces the likelihood of unauthorized access, thereby protecting sensitive information from potential threats, including financial loss, reputational damage, and legal consequences.  
+**Description:** Restricts access to Confidential or Highly Confidential applications based on geographic location. The script creates a named location, “Countries allowed for CHC data access,” initially including the United States and Switzerland. Access from outside the allowed countries is blocked. Organizations should adjust the country list to match data residency and compliance requirements. This control supports data sovereignty and limits access from untrusted regions.
 
-Prerequisites for implementing this policy include the availability of hardware tokens or similar secure verification tools.  
+**o DLP-004-2606-Block-AllApps-Guests-BlockAccessToCHCData**
+(Block guest/external user access to confidential & highly confidential apps)
 
-**o	DLP003-Block-AllApps-Guests-BlockAccessToCHCData**  
-(Block access to highly confidential apps for non-employees)  
-
-By default, this policy blocks GuestsOrExternalUsers from accessing confidential or highly confidential data. The policy can be modified to also include groups of users which have an internal account in the organization but are considered to be externals, such as contractors with a temporary hire.  
-
-**o	DLP004-Block-AllApps-AllUsers-AllowSpecificCountriesOnlyForCHCData**  
-(Allow access to CHC data only from specific countries)  
-
-This policy is based on a named location 'Countries allowed for CHC data access' which is created by the PowerShell script and includes US (United States) and CH (Switzerland) by default. To change the countries allowed to access confidential or highly confidential data, the named location object must be edited.  
-
-These policies necessitate the use of custom security attributes to ensure implementation and control. The attribute set is named DataSensitivity. It contains a multi-value attribute Classification with the values Highly Confidential and Confidential. The attributes are assigned to registered apps which contain highly confidential or confidential information.
-
+**Description:** Blocks guest and external users from accessing applications classified as Confidential or Highly Confidential. Because external identities typically do not require access to the organization’s most sensitive applications or data, this policy enforces access only for trusted internal identities. If certain contractor accounts should be treated similarly, they can be added to the policy scope.
+These DLP policies require each sensitive application to be assigned the DataSensitivity: Classification custom attribute with the appropriate value. Conditional Access uses an application filter referencing those values to include the relevant applications dynamically.
+  
 ![Picture7](/pics/Picture7.png) 
  
 ## Persona-based Access Control  
@@ -176,52 +169,56 @@ Also add the Exchange Administrator role in Entra ID although it's recommended t
    
 5.	**Workload Identities** – A workload identity is an identity you assign to a software workload (such as an application, service, script, or container) to authenticate and access other services and resources. The terminology is inconsistent across the industry, but generally a workload identity is something you need for your software entity to authenticate with some system. For example, in order for GitHub Actions to access Azure subscriptions the action needs a workload identity which has access to those subscriptions. A workload identity could also be an AWS service role attached to an EC2 instance with read-only access to an Amazon S3 bucket.
      
-In Microsoft Entra, workload identities are applications, service principals, and managed identities.
+In Microsoft Entra, workload identities are applications, service principals, managed identities, agent identities and agent users.
 
-**o	PER001-Block-AllApps-Admins-RequireSecureCompliantDevice**  
-(Require compliant and secure access workstation for privileged Entra ID roles)  
+**o PER-001-2606-Allow-AllApps-Admins-PhishingResistantMFA**
+(Require phishing-resistant MFA for privileged role administrators)
 
-This policy mandates that privileged Entra ID roles must utilize compliant and secure access workstations, commonly referred to as Privileged Access Workstations (PAWs). The purpose of this requirement is to enhance security measures for individuals holding roles with elevated permissions, reducing the risk of unauthorized access, credential compromise, or insider threats. By enforcing the use of PAWs, the policy ensures that privileged activities are conducted in a controlled and secure environment, isolated from general-purpose devices that may be more susceptible to vulnerabilities.  
+**Description:** Requires users in privileged administrative roles to authenticate with phishing-resistant MFA through an authentication strength condition. The policy targets highly privileged Microsoft Entra roles and allows only strong methods such as FIDO2 security keys or certificate-based authentication. This reduces the likelihood that phishing can compromise administrative accounts. Before enforcement, ensure all affected administrators have registered phishing-resistant credentials to avoid lockout.
 
-The reasoning behind this policy lies in the critical nature of privileged accounts within any organization. These accounts often have access to sensitive systems, infrastructure, and data, making them attractive targets for cyberattacks. Implementing PAWs mitgates risks by providing a dedicated, hardened workstation designed specifically for high-security operations, thereby minimizing attack vectors and ensuring adherence to Zero Trust principles.  
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-admin-phish-resistant-mfa">Require phishing-resistant multifactor authentication for administrators</a>
 
-Prerequisites for this policy include the physical availability of Privileged Access Workstations to users assigned privileged Entra ID roles. These users must possess and log into the PAWs before accessing Azure portals or elevating their identity through Privileged Identity Management (PIM). Without a compliant PAW, users will be unable to fulfill the requirements of this policy, necessitating a break glass scenario if access is urgently required. Additionally, the enforcement of this policy must align with organizational processes for provisioning PAWs and training users to utilize them effectively.  
+**o PER-002-2606-Block-AllApps-Admins-AllowSpecificCountriesOnly**
+(Allow privileged role admin access only from specific countries/locations)
 
-**o	PER002-Block-AllApps-Externals-RequireCompliantSecureVDI**  
-(Require compliant and secure VDI for external users)  
+**Description:** Limits privileged administrator sign-ins to trusted geographic locations. The script creates a named location, “Countries allowed for admin access,” with the United States and Switzerland as default examples. Sign-ins from outside those countries are blocked, while required services such as Azure AD device registration or Intune enrollment can remain globally accessible. This reduces the risk of unauthorized administrative access from unexpected regions.
+**o PER-003-2606-Block-AllApps-Admins-HighSignInRisk**
+(Block privileged role users with high sign-in risk)
 
-This policy ensures that external users accessing corporate services must do so through managed Virtual Desktop Infrastructure (VDI) session hosts if they are using unmanaged devices. By enforcing this requirement, the policy aims to safeguard corporate data and resources by providing an additional layer of security through controlled virtual environments. It can be applied to Guest and External Users or specific security groups, depending on organizational needs.  
+**Description:** Blocks sign-ins by privileged role users when Microsoft Entra ID Protection identifies high sign-in risk. For privileged accounts, the policy denies access rather than allowing MFA remediation, because compromised administrative credentials can have significant impact. This helps stop suspicious administrative sign-ins before access to critical systems is granted.
+**o PER-004-2606-Block-AllApps-Admins-HighUserRisk**
+(Block privileged role users with high user risk)
 
-The reasoning for implementing this policy lies in mitigating risks associated with unmanaged devices, which are often more vulnerable to security threats. By requiring access via managed VDI session hosts, organizations can isolate corporate environments from potential vulnerabilities present on external users' devices, adhering to Zero Trust principles and ensuring secure access.  
+**Description:** Blocks privileged role users when Microsoft Entra ID Protection marks their account as high user risk, indicating likely compromise. Unlike standard users, who may be required to reset their password, privileged users are blocked until an administrator remediates the risk. This prevents potentially compromised administrative accounts from being used for high-impact actions.
+**o PER-005-2606-Block-AllApps-Admins-RequireCompliantDevice**
+(Require compliant device for privileged role user access)
 
-Prerequisites for this policy include enabling the Microsoft.DesktopVirtualization resource provider on at least one Azure subscription. This is necessary for selecting target resources such as Azure Virtual Desktop, Microsoft Remote Desktop, and Windows Cloud Login. Additionally, Microsoft Entra multifactor authentication must be enforced for Azure Virtual Desktop sessions via Conditional Access policies to maintain a robust security posture.  
+**Description:** Blocks privileged role users from accessing applications unless they use an Intune-compliant or hybrid joined device. Because administrative accounts are high-value targets, this policy prevents privileged access from personal or unmanaged endpoints. It applies device compliance requirements specifically to administrative roles, reducing exposure from risky devices.
 
-**o	PER003-Block-AllApps-Admins-AllowSpecificCountriesOnly**  
-(Allow privileged Entra ID roles only from specific countries)  
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid">Require compliant device or Microsoft Entra hybrid joined device for administrators</a>
 
-This policy restricts access to privileged Entra ID roles based on specific countries. The named location object titled 'Countries allowed for admin access' is created using a PowerShell script and includes the United States and Switzerland by default. Organizations can modify this named location object to include or exclude specific countries, ensuring that highly privileged users can only access administrative portals and services from designated locations.  
+**o PER-001-2606-Allow-AllApps-Admins-PhishingResistantMFA**
+(Require phishing-resistant MFA for privileged role administrators)
 
-The reasoning behind this policy rests on enhancing security by limiting access to sensitive roles from approved geographical areas. Such restrictions reduce the risk of unauthorized access that might arise from compromised credentials or devices in non-approved regions.  
+**Description:** Requires users in privileged administrative roles to authenticate with phishing-resistant MFA through an authentication strength condition. The policy targets highly privileged Microsoft Entra roles and allows only strong methods such as FIDO2 security keys or certificate-based authentication. This reduces the likelihood that phishing can compromise administrative accounts. Before enforcement, ensure all affected administrators have registered phishing-resistant credentials to avoid lockout.
 
-Prerequisites for implementing this policy include configuring the named location object through PowerShell to specify the allowed countries. Administrators must ensure that the object is correctly edited to reflect the organization's geographic security requirements.  
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-admin-phish-resistant-mfa">Require phishing-resistant multifactor authentication for administrators</a>
 
-**o	PER004-Block-AllApps-Admins-HighUserRisk**  
-(Block privileged users with high user risk)  
+**o PER-002-2606-Block-AllApps-Admins-AllowSpecificCountriesOnly**
+(Allow privileged role admin access only from specific countries/locations)
 
-This policy blocks access for users who hold one or more of the 28 highly privileged Entra ID roles if they are identified as having a high user risk. Its purpose is to mitigate risks associated with compromised accounts that could lead to unauthorized access to sensitive resources and significant security breaches. Unlike the standard approach of requiring password changes for high-risk users, this policy emphasizes stringent access control measures for privileged accounts, ensuring a higher level of security.  
+**Description:** Limits privileged administrator sign-ins to trusted geographic locations. The script creates a named location, “Countries allowed for admin access,” with the United States and Switzerland as default examples. Sign-ins from outside those countries are blocked, while required services such as Azure AD device registration or Intune enrollment can remain globally accessible. This reduces the risk of unauthorized administrative access from unexpected regions.
+**o PER-003-2606-Block-AllApps-Admins-HighSignInRisk**
+(Block privileged role users with high sign-in risk)
 
-The reasoning behind this policy is rooted in the critical nature of privileged roles within an organization. Compromise of these roles can result in severe consequences as they often have extensive access and control over organizational resources. By blocking access for these users when high risk is detected, the policy minimizes the potential impact of malicious activity stemming from compromised credentials.
- 
-**o	PER005-Block-AllApps-Admins-HighSignInRisk**  
-(Block privileged users with high sign-in risk)  
+**Description:** Blocks sign-ins by privileged role users when Microsoft Entra ID Protection identifies high sign-in risk. For privileged accounts, the policy denies access rather than allowing MFA remediation, because compromised administrative credentials can have significant impact. This helps stop suspicious administrative sign-ins before access to critical systems is granted.
+**o PER-004-2606-Block-AllApps-Admins-HighUserRisk**
+(Block privileged role users with high user risk)
 
-The policy blocks access for users who hold one or more of the 28 highly privileged Entra ID roles if they are identified as having a high sign-in risk. It is designed to mitigate the severe consequences that could arise if a highly privileged role is compromised, as these roles typically have extensive access and control within the organization. By blocking access outright, the policy ensures that the risk of unauthorized actions stemming from compromised credentials is significantly reduced.  
+**Description:** Blocks privileged role users when Microsoft Entra ID Protection marks their account as high user risk, indicating likely compromise. Unlike standard users, who may be required to reset their password, privileged users are blocked until an administrator remediates the risk. This prevents potentially compromised administrative accounts from being used for high-impact actions.
+**o PER-005-2606-Block-AllApps-Admins-RequireCompliantDevice**
+(Require compliant device for privileged role user access)
 
-The reasoning behind this policy emphasizes the critical importance of privileged accounts and the potential impact of malicious activity. Simply applying multi-factor authentication again in such scenarios is deemed insufficient due to the elevated risks associated with these roles. Blocking access for users exhibiting high sign-in risk provides a robust safeguard against exploitation.  
+**Description:** Blocks privileged role users from accessing applications unless they use an Intune-compliant or hybrid joined device. Because administrative accounts are high-value targets, this policy prevents privileged access from personal or unmanaged endpoints. It applies device compliance requirements specifically to administrative roles, reducing exposure from risky devices.
 
-![Picture9](/pics/Picture9.png)  
- 
-## Conditional Access Insights and Reporting  
-The Conditional Access insights and reporting workbook enables you to understand the impact of Conditional Access policies in your organization over time. During sign-in, one or more Conditional Access policies might apply, granting access if certain grant controls are satisfied or denying access otherwise. Because multiple Conditional Access policies might be evaluated during each sign-in, the insights and reporting workbook lets you examine the impact of an individual policy or a subset of all policies.  
-
-![Picture10](/pics/Picture10.png) 
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid">Require compliant device or Microsoft Entra hybrid joined device for administrators</a>
