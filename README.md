@@ -116,7 +116,7 @@ The following baseline policies provide a core set of controls for protecting al
 
 ## Data sensitivity-based Access Control
  
-![Picture6](/pics/Picture6.png) 
+![Picture6](/pics/Common_Baseline_Policies_for_Conditional_Access_Updated_preview.png) 
 
 To protect applications that handle Confidential or Highly Confidential data, the framework includes policies based on application-specific attributes. These policies use a custom DataSensitivity attribute set, including a Classification attribute with values such as “Confidential” and “Highly Confidential.” Conditional Access filters for applications with these attributes and applies stricter controls.  
 
