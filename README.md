@@ -8,30 +8,29 @@ Microsoft Switzerland GmbH
  
 ## About this Conditional Access Framework
 
-Careful planning of your Conditional Access deployment is important to implementing your organization's access strategy for applications and resources. In today's mobile-first, cloud-first environment, users access your organization's resources from various locations, devices, and applications. Consequently, focusing solely on who can access a resource is insufficient. Considerations must also include the user’s location, the device being used, the specific resource in question, and other relevant factors.
+A well-planned Conditional Access deployment is essential for implementing an organization’s access strategy for applications and resources. In a mobile-first, cloud-first environment, users access organizational resources from many locations, devices, and applications. As a result, access decisions must consider more than who is requesting access; they must also account for location, device state, the requested resource, and other relevant signals.
 
-Microsoft Entra Conditional Access (CA) utilizes signals such as user identity, device, and location to make automated decisions and enforce access policies tailored to your organization. These CA policies can apply access controls like multifactor authentication (MFA). By utilizing CA policies, organizations can prompt users for MFA when necessary, thereby enhancing security while ensuring a seamless user experience.
+Microsoft Entra Conditional Access uses signals such as identity, device, and location to make automated access decisions and enforce policies aligned with organizational requirements. These policies can require controls such as multifactor authentication (MFA), prompting users only when needed to strengthen security while preserving a smooth user experience.
 
 ![Picture1](/pics/Picture1.png)
  
-This document introduces a base Conditional Access framework, which builds on templates available in Entra ID but adds additional policies to secure administrative work with highly privileged Entra ID roles and to safeguard access to sensitive data. The framework is thought to be a starting point for an implementation which covers all users. Customers most certainly will add more policies to meet specific needs, and not all policies in this framework will be enabled in all environments from the start.
+This document presents a baseline Conditional Access policy framework based on recommended Microsoft Entra templates and extended with additional policies for privileged administrative activities and sensitive data access. It is intended as a starting point for broad implementation across all users. Organizations will typically customize the framework and add further policies to meet specific requirements, and not every policy will be enabled in every environment from the outset.
 
-The primary purpose of this framework is to provide guidelines on how to configure baseline policies to enhance security while maintaining operational efficiency. For instance, it recommends excluding break-glass accounts from all Conditional Access policies to prevent accidental lockouts. Additionally, it emphasizes the importance of setting policies to Report-only mode initially, allowing organizations to monitor the impact of these policies before enforcing them.
+The framework provides guidance for configuring essential Conditional Access policies that improve security without disrupting operations. For example, it recommends excluding emergency “break-glass” accounts from all Conditional Access policies to avoid accidental lockouts. Directory synchronization service accounts should also be excluded to maintain uninterrupted identity synchronization. Policies should initially be deployed in Report-only mode so organizations can assess their impact through sign-in logs and Conditional Access insights before enforcement.
 
-The framework leverages the capabilities of Microsoft Entra Conditional Access, enabling organizations to enforce their access policies based on various signals such as user identity, device type, and location. By using these signals, organizations can automate their access decisions, ensuring that security measures like multifactor authentication (MFA) are applied when necessary.
-
-To facilitate the rapid deployment of this Conditional Access framework, a PowerShell script is available. This script streamlines the process, allowing for swift implementation without the need for in-depth manual configuration. It ensures that your access policies are applied efficiently and effectively, enhancing the security of your organization's resources.
+A PowerShell script is included to support rapid deployment of this Conditional Access framework. The script automates policy creation, helping ensure consistent and efficient application of access policies.
  
 ## The Conditional Access funnel model
 
 ![Picture2](/pics/Picture2.png) 
 
 ![Picture3](/pics/Picture3.png) 
-
  
 ## Baseline policies
-Exclude break-glass and directory sync accounts from all Conditional Access policies to prevent accidental lockouts. Break-glass accounts ensure admin access in emergencies, while directory sync accounts must remain unaffected for seamless identity synchronization.
-Always set policies to Report-only mode first to monitor their impact before enforcing them. Analyze sign-in logs and Conditional Access insights to prevent disruptions.
+
+Exclude break-glass emergency access accounts and directory synchronization accounts from all Conditional Access policies to reduce the risk of accidental tenant lockout. Break-glass accounts must remain available for emergency administration, while Microsoft Entra ID Directory Synchronization Accounts cannot satisfy MFA or device-based requirements by design. Deploy policies in Report-only mode first to assess their impact and adjust them as needed before enforcement, helping avoid unintended disruption.
+
+The following baseline policies provide a core set of controls for protecting all users and sign-ins. They appear in the same order in which the deployment script creates them.
 
 ![Picture4](/pics/Picture4.png) 
  
