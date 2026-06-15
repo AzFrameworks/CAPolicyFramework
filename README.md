@@ -24,7 +24,7 @@ A PowerShell script is included to support rapid deployment of this Conditional 
 
 ![Picture2](/pics/Conditional_Access_Funnel_Graphics_preview_2.png) 
 
-![Picture3](/pics/Picture3.png) 
+![Picture3](/pics/Conditional_Access_Funnel_Graphics_preview_1.png) 
  
 ## Baseline policies
 
