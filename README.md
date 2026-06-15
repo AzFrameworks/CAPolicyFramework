@@ -227,3 +227,33 @@ In Microsoft Entra, workload identities are applications, service principals, ma
 **Description:** Blocks privileged role users from accessing applications unless they use an Intune-compliant or hybrid joined device. Because administrative accounts are high-value targets, this policy prevents privileged access from personal or unmanaged endpoints. It applies device compliance requirements specifically to administrative roles, reducing exposure from risky devices.
 
 <a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid">Require compliant device or Microsoft Entra hybrid joined device for administrators</a>
+
+**o PER-006-2606-Block-AllApps-Admins-RequireSecureCompliantDevice**
+(Require secure, compliant workstation for privileged role user access)
+
+**Description:** Further restricts privileged access to known Privileged Access Workstations or similarly hardened devices that are also compliant. The script uses a device attribute filter, such as device.extensionAttribute1 = “PAW,” together with compliance state. This ensures that privileged roles can be used only from devices specifically configured for sensitive administrative tasks.
+
+**o PER-007-2606-Block-AllApps-Agents-HighRisk**
+(Block high-risk workload identity (service principal) sign-ins)
+
+**Description:** Extends Conditional Access protections to workload identities by blocking token issuance for service principals marked as high risk by Microsoft Entra ID Protection. If an application identity appears compromised, access to resources is denied. This helps protect automation and service accounts from malicious use. Note: Conditional Access for workload identities requires Microsoft Entra Workload Identities Premium.
+
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/workload-identity">Conditional Access for workload identities</a>
+
+**o PER-008-2606-BlockAllApps-AgentUsers-HighRisk**
+(Block high-risk sign-ins by agent-assisted or autonomous user sessions)
+
+**Description:** Addresses scenarios where an autonomous or assistive agent acts on behalf of a user. If a sign-in in an agent context is marked as high risk, the policy blocks the session. This helps prevent compromised or suspicious agent-assisted sessions from accessing resources. This capability may depend on Conditional Access for agents preview features or specific licensing conditions.
+
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/agent-id">Conditional Access for agents</a>
+
+**o PER-009-2606-Block-AllApps-Externals-RequireCompliantSecureVDI**
+(Require compliant, secure VDI for external user access)
+
+**Description:** Requires guest and external users to access cloud resources through an approved Virtual Desktop Infrastructure when they are not using a managed device. The policy blocks direct access to cloud apps except the designated VDI service, such as Azure Virtual Desktop. Once connected to a managed VDI host, users can access resources from a controlled environment. This reduces data leakage risk from unmanaged external endpoints. Prerequisite: Deploy an approved VDI solution such as Azure Virtual Desktop or Windows 365 and enforce MFA as needed.
+
+**o PER-010-2606-Block-AdminPortals-Guests-AdminPortals**
+(Block guest users from all administrative portals)
+
+**Description:** Blocks guest and external users from accessing Microsoft administrative portals, including the Azure portal, Microsoft 365 admin center, and Intune admin center. This prevents external identities from reaching high-privilege management interfaces. In cross-tenant collaboration scenarios, guest accounts should not need access to administrative tools, and this policy enforces that separation.
+Conditional Access Insights and Reporting
