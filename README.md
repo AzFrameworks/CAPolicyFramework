@@ -22,7 +22,7 @@ A PowerShell script is included to support rapid deployment of this Conditional 
  
 ## The Conditional Access funnel model
 
-![Picture2](/pics/Picture2.png) 
+![Picture2](/pics/Conditional_Access_Funnel_Graphics_preview_2.png) 
 
 ![Picture3](/pics/Picture3.png) 
  
