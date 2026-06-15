@@ -39,7 +39,7 @@ The following baseline policies provide a core set of controls for protecting al
 
 **Description:** Blocks legacy authentication protocols, such as POP, IMAP, SMTP, and older Office clients, across all applications and users. Because these protocols do not support modern controls such as MFA or device compliance, they are frequently used in credential-based attacks. Blocking legacy authentication requires users to rely on modern authentication methods and helps remove a common attack path.
 
-href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication">Block legacy authentication with Conditional Access (https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication)</a> (https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication)
+<href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication">Block legacy authentication with Conditional Access (https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication)</a>
 
 **o BAS-002-2606-Allow-AllResources-AllUsers-RequireMFA**
 (Require multifactor authentication for all users)
