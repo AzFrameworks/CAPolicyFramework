@@ -46,49 +46,49 @@ The following baseline policies provide a core set of controls for protecting al
 
 **Description:** Requires all users to complete MFA when accessing any application, reducing the risk of account compromise. The policy enforces MFA for all sign-ins, with typical exclusions for break-glass and non-interactive service accounts such as directory synchronization accounts. Organization-wide MFA is strongly recommended because accounts protected by MFA are far less likely to be compromised.
 
-Require multifactor authentication for all users
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-mfa-strength">Require multifactor authentication for all users</a>
 
 **o BAS-003-2606-Block-AllResources-AllUsers-UnsupportedPlatform**
 (Block access from unknown or unsupported device platforms)
 
 **Description:** Blocks access to all resources when the device platform is not recognized as Windows, macOS, Linux, iOS, or Android, including devices reported as “Unknown” or unsupported platforms such as Chrome OS. Because the device platform condition depends on the user agent string and is not strongly validated, this policy should be combined with controls such as device compliance or app protection to reduce the risk of user-agent spoofing.
 
-Block unknown or unsupported device platform
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-device-unknown-unsupported">Block unknown or unsupported device platform</a>
 
 **o BAS-004-2606-Allow-AllResources-AllUsers-NoPersistentBrowser**
 (Disable persistent browser sessions and enforce reauthentication frequency on unmanaged devices)
 
 **Description:** Prevents browser sessions from remaining signed in on personal or non-compliant devices. The policy applies to all users on devices that are not hybrid Azure AD joined or Intune compliant, sets persistent browser sessions to “Never,” and requires reauthentication every hour. This reduces the risk of unauthorized access from stale sessions, especially on unmanaged devices.
 
-Require reauthentication and disable browser persistence
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-persistent-browser">Require reauthentication and disable browser persistence</a>
 
 **o BAS-005-2606-Allow-AllResources-AllUsers-MFAforRiskySignIns**
 (Require multifactor authentication for high-risk sign-in attempts)
 
 **Description:** Requires MFA when Microsoft Entra ID Protection identifies a sign-in as high risk. Requiring users to reverify their identity during anomalous sign-ins helps interrupt illegitimate access attempts, even when a password has been compromised. If the user has not registered for MFA, the sign-in is blocked until registration or administrative remediation is completed.
 
-Require multifactor authentication for elevated sign-in risk
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-risk-based-sign-in">Require multifactor authentication for elevated sign-in risk</a>
 
 **o BAS-006-2606-Allow-AllResources-AllUsers-PasswordChangeForHighRiskUsers**
 (Require password change for high-risk user accounts)
 
 **Description:** Requires users to change their password securely when Microsoft Entra ID Protection marks their account as high risk. Access to resources is blocked until the user resets the password and completes MFA, allowing the risk to be remediated. This helps limit damage from leaked or compromised credentials by ensuring they are rotated before further access is granted.
 
-Require remediation for risky users
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-risk-based-user">Require remediation for risky users</a>
 
 **o BAS-007-2606-Block-AllResources-AllUsers-RequireCompliantDevice**
 (Require compliant device for all user access)
 
 **Description:** Blocks access to cloud resources from devices that are not Intune compliant or hybrid Azure AD joined. The policy applies to internal users, with exclusions for emergency accounts and external or guest identities. Requiring device compliance helps prevent access from unmanaged or insecure endpoints; users on personal or non-compliant devices must enroll their device or use an approved access method.
 
-Require device compliance with Conditional Access
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-device-compliance">Require device compliance with Conditional Access</a>
 
 **o BAS-008-2606-Block-AllResources-AllUsers-DeviceFlowAuthenticationTransfer**
 (Block device code flow and authentication token transfer)*
 
 **Description:** Blocks device code flow and authentication token transfer for all users. These flows can introduce bypass opportunities, especially in phishing scenarios or cross-device sign-ins. Blocking them helps ensure that authentication occurs through standard interactive methods governed by the organization’s Conditional Access controls.
 
-Block authentication flows with Conditional Access policy
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-authentication-flows">Block authentication flows with Conditional Access policy</a>
 
 **o BAS-009-2606-Block-O365Apps-AllUsers-ElevatedInsiderRisk**
 (Block access to Microsoft 365 apps for users flagged with elevated insider risk)
@@ -99,56 +99,20 @@ Block authentication flows with Conditional Access policy
 
 **Description:** Applies application-enforced restrictions for Office 365 cloud apps, typically when accessed from unmanaged or non-compliant devices. Supported services such as SharePoint Online, OneDrive, and Outlook on the web can then provide limited web-only access, such as viewing without downloading. SharePoint and Exchange restrictions must be configured in advance. This approach protects corporate data on unmanaged endpoints by allowing controlled access instead of full access.
 
-Use application enforced restrictions for unmanaged devices
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-app-enforced-restrictions">Use application enforced restrictions for unmanaged devices</a>
 
 **o BAS-011-2606-Allow-AllResources-AllUsers-SecureSecurityInfoRegistration**
 (Secure MFA & SSPR security info registration process)
 
 **Description:** Requires MFA when users register or change security information for MFA or Self-Service Password Reset (SSPR). The policy protects the “Register security info” user action and helps prevent attackers with only a password from adding or changing authentication methods. Typical exclusions include break-glass accounts, guests, and Global Administrators to avoid setup issues. Prerequisite: Combined registration for MFA and SSPR should be enabled.
 
-Protect security info registration with Conditional Access policy
+<a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-security-info-registration">Protect security info registration with Conditional Access policy</a>
 
 **o BAS-012-2606-Allow-O365Apps-AllUsers-ApplicationEnforcedRestrictions**
 (Enforce additional session controls for Office 365 applications)
 
 **Description:** Applies application-enforced restrictions to Office 365 apps, potentially together with an MFA requirement. This layered approach helps ensure that users accessing Office 365 from unmanaged or untrusted contexts meet strong authentication requirements while operating within limited application experiences. It works with configured cloud app restrictions to reduce data leakage risk on unmanaged devices.
 
-**o	BAS012-Allow-AllApps-AllUsers-SecureSecurityInfoRegistration**  
-(Securing security info registration)
-
-Securing security info registration involves controlling how and when users register for multi-factor authentication (MFA) and self-service password reset (SSPR) within Microsoft Entra ID. This policy safeguardes the registration process, treating it as any other application within Conditional Access policies. Organizations with combined registration enabled can leverage this feature to ensure that the registration process remains protected from unauthorized access or misuse.
-
-This approach allows administrators to enforce strict security measures during registration, such as requiring users to use secure authenticator apps or enabling passwordless phone sign-in. By securing this entry point, organizations reduce the risk of malicious actors exploiting the registration process as a vulnerability to bypass security protocols.
-
-For this policy, organizations must have combined registration activated for Multi-Factor Authentication (MFA) and Self-Service Password Reset (SSPR).
-
-**o	BAS013-Allow-O365Apps-AllUsers-ApplicationEnforcedRestrictions**  
-(Use application enforced restrictions for O365 apps)
-
-This policy applies to unmanaged and managed non-compliant devices.
-
-Prior to setting up this Conditional Access policy, pre-requisite changes are required in SharePoint Online and Exchange Online:
-
-o	Block or limit access to a specific SharePoint site or OneDrive
-o	Limit access to email attachments in Outlook on the web and the new Outlook for Windows
-o	Enforce idle session timeout on unmanaged devices
-
-Application enforced restrictions for O365 apps allow organizations to implement policies that enhance security and control over their data and resources. These policies can block or limit access to specific SharePoint sites or OneDrive, restrict access to email attachments in Outlook on the web and the new Outlook for Windows, and enforce idle session timeouts on unmanaged devices. By leveraging these application enforced restrictions, organizations can tailor their access controls to meet specific security needs and ensure that sensitive information remains protected, mitigating risks associated with unauthorized access and data breaches.
-
-**o	BAS014-Block-AllApps-AllUsers-RequireCompliantDevice**  
-(Require compliant devices for all users)
-
-This policy, which mandates the use of compliant devices for all users, ensures that only devices meeting the organization's security standards can access applications and data. By enforcing compliance, the policy mitigates risks associated with unauthorized access and data breaches, thereby protecting sensitive information.
-
-The reasoning behind this policy is rooted in creating a secure digital environment. Requiring compliant devices eliminates vulnerabilities posed by unmanaged and potentially compromised devices, as these may not adhere to the organization's security protocols.
-By default, each policy created from templates in Entra ID is created in report-only mode. We recommended organizations test and monitor usage, to ensure the intended result, before turning on each policy.
-
-
-**o	BAS015-Block-AllApps-AllUsers-DeviceFlowAuthenticationTransfer**  
-(Block device code flow and authentication transfer for guest users)  
-
-This policy restricts users from utilizing device code flow and authentication transfer methods within the organization's applications. Device code flow is a method where a user initiates authentication on one device and completes it on another, commonly used in scenarios where input capabilities are limited. Authentication transfer allows a user to authenticate in one application and then use that authentication token to access another application. By blocking these methods for users, the policy aims to enhance security and prevent unauthorized access through potentially vulnerable authentication pathways, ensuring that only appropriate authentication mechanisms are used for user access.
- 
 ## Data sensitivity-based Access Control
  
 ![Picture6](/pics/Picture6.png) 
