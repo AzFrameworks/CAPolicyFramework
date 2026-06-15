@@ -116,8 +116,6 @@ The following baseline policies provide a core set of controls for protecting al
 
 ## Data sensitivity-based Access Control
  
-![Picture6](/pics/Common_Baseline_Policies_for_Conditional_Access_Updated_preview.png) 
-
 To protect applications that handle Confidential or Highly Confidential data, the framework includes policies based on application-specific attributes. These policies use a custom DataSensitivity attribute set, including a Classification attribute with values such as “Confidential” and “Highly Confidential.” Conditional Access filters for applications with these attributes and applies stricter controls.  
 
 **o DLP-001-2606-Allow-AllApps-AllUsers-PhishingResistantMFAforCHCData**
@@ -141,11 +139,7 @@ To protect applications that handle Confidential or Highly Confidential data, th
 **Description:** Blocks guest and external users from accessing applications classified as Confidential or Highly Confidential. Because external identities typically do not require access to the organization’s most sensitive applications or data, this policy enforces access only for trusted internal identities. If certain contractor accounts should be treated similarly, they can be added to the policy scope.
 These DLP policies require each sensitive application to be assigned the DataSensitivity: Classification custom attribute with the appropriate value. Conditional Access uses an application filter referencing those values to include the relevant applications dynamically.
   
-![Picture7](/pics/Picture7.png) 
- 
 ## Persona-based Access Control  
-
-![Picture8](/pics/Picture8.png) 
 
 Persona-based access control categorizes users by their job function, behavior, and risk level. Unlike traditional role-based access, which grants permissions based on predefined roles, persona-based access adapts to real-time conditions.  
 
