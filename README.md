@@ -1,6 +1,6 @@
 
 
-Version 1.1 Final
+Version 2.0 Final
 
 Daniel Metzger
 Cloud Solution Architect Identity & Security
