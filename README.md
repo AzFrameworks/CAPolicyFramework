@@ -34,72 +34,84 @@ The following baseline policies provide a core set of controls for protecting al
 
 ![Picture4](/pics/Picture4.png) 
  
-**o	BAS001-Block-AllApps-AllUsers-UnsupportedPlatform**  
-(Block access for unknown or unsupported device platform)  
+**o BAS-001-2606-Block-AllResources-AllUsers-LegacyAuth**
+(Block legacy authentication protocols that cannot enforce MFA)
 
-Users are blocked from accessing company resources when the device type is unknown or unsupported.
+**Description:** Blocks legacy authentication protocols, such as POP, IMAP, SMTP, and older Office clients, across all applications and users. Because these protocols do not support modern controls such as MFA or device compliance, they are frequently used in credential-based attacks. Blocking legacy authentication requires users to rely on modern authentication methods and helps remove a common attack path.
 
-The device platform condition is based on user agent strings. Conditional Access policies using it should be used with another policy, like one requiring device compliance or app protection policies.
+Block legacy authentication with Conditional Access
 
-**o	BAS002-Block-O365Apps-AllUsers-ElevatedInsiderRisk**  
-(Block access to Office365 apps for users with insider risk)  
-
-Most users have a normal behavior that can be tracked. When they fall outside of this norm it could be risky to allow them to sign in. Organizations might want to block that user or ask them to review a specific terms of use policy. Microsoft Purview can provide an insider risk signal to Conditional Access to refine access control decisions. Insider risk management is part of Microsoft Purview. You must enable it before you can use the signal in Conditional Access.
-
-**o	BAS003-Block-AllApps-Guests-AdminPortals**  
-(Block guest user access to admin portals)
-
-Blocks GuestsOrExternalUsers from accessing the 'MicrosoftAdminPortals' resources.
-
-**o	BAS004-Block-AllApps-AllUsers-LegacyAuth**  
-(Block legacy authentication)
-
-Microsoft recommends that organizations block authentication requests using legacy protocols that don't support multifactor authentication. Based on Microsoft's analysis more than 97 percent of credential stuffing attacks use legacy authentication and more than 99 percent of password spray attacks use legacy authentication protocols. These attacks would stop with basic authentication disabled or blocked.
-
-**o	BAS005-Allow-AllApps-AllUsers-NoPersistentBrowser**  
-(No persistent browser session)
-
-Protect user access on unmanaged devices by preventing browser sessions from remaining signed in after the browser is closed and setting a sign-in frequency to 1 hour.
-
-~~**o	DEPRECATED - BAS006-Allow-AllApps-AllUsers-RequireApprovedClientApps**  
-(Require approved client apps or app protection policies)
-
-People regularly use their mobile devices for both personal and work tasks. While making sure staff can be productive, organizations also want to prevent data loss from applications on devices they may not manage fully. With Conditional Access, organizations can restrict access to approved (modern authentication capable) client apps with Intune app protection policies. For older client apps that may not support app protection policies, administrators can restrict access to approved client apps.~~
-
-**o	BAS007-Block-AllApps-Admins-RequireCompliantDevice**  
-(Require compliant device for administrators)
-
-Microsoft Intune and Microsoft Entra work together to secure your organization through device compliance policies and Conditional Access. Device compliance policies are a way to ensure user devices meet minimum configuration requirements. The requirements can be enforced when users access services protected with Conditional Access policies.
-
-**o	BAS008-Allow-AllApps-AllUsers-RequireMFA**  
+**o BAS-002-2606-Allow-AllResources-AllUsers-RequireMFA**
 (Require multifactor authentication for all users)
 
-Microsoft provides multiple templates in Entra ID to configure multifactor authentication (MFA).
+**Description:** Requires all users to complete MFA when accessing any application, reducing the risk of account compromise. The policy enforces MFA for all sign-ins, with typical exclusions for break-glass and non-interactive service accounts such as directory synchronization accounts. Organization-wide MFA is strongly recommended because accounts protected by MFA are far less likely to be compromised.
 
-o	Require multifactor authentication for admins
-o	Require multifactor authentication for Azure Management
-o	Require multifactor authentication for guest access
-o	Require multifactor authentication for all users
+Require multifactor authentication for all users
 
-Implementing multifactor authentication (MFA) for all users, rather than for only a subset, is highly advisable as it substantially enhances organizational security by incorporating an additional layer of protection against unauthorized access. MFA necessitates that users provide multiple forms of verification prior to accessing sensitive information, thereby mitigating the risk of account compromise due to stolen passwords or other credentials.
+**o BAS-003-2606-Block-AllResources-AllUsers-UnsupportedPlatform**
+(Block access from unknown or unsupported device platforms)
 
-**o	BAS009-Allow-AllApps-AllUsers-MFAforRiskySignIns**  
-(Require multifactor authentication for risky sign-ins)
+**Description:** Blocks access to all resources when the device platform is not recognized as Windows, macOS, Linux, iOS, or Android, including devices reported as “Unknown” or unsupported platforms such as Chrome OS. Because the device platform condition depends on the user agent string and is not strongly validated, this policy should be combined with controls such as device compliance or app protection to reduce the risk of user-agent spoofing.
 
-Requiring multifactor authentication for risky sign-ins serves as an effective measure to ensure the authenticity of user identity during sessions that deviate from established behavioral norms.
+Block unknown or unsupported device platform
 
-A sign-in risk represents the probability that a given authentication request isn't the identity owner. Organizations with Microsoft Entra ID P2 licenses can create Conditional Access policies incorporating Microsoft Entra ID Protection sign-in risk detections.
-The Sign-in risk-based policy protects users from registering MFA in risky sessions. If users aren't registered for MFA, their risky sign-ins are blocked, and they see an AADSTS53004 error.
+**o BAS-004-2606-Allow-AllResources-AllUsers-NoPersistentBrowser**
+(Disable persistent browser sessions and enforce reauthentication frequency on unmanaged devices)
 
-**o	BAS010-Allow-AllApps-AllUsers-PasswordChangeForHighRiskUsers**  
-(Require password change for high-risk users)
+**Description:** Prevents browser sessions from remaining signed in on personal or non-compliant devices. The policy applies to all users on devices that are not hybrid Azure AD joined or Intune compliant, sets persistent browser sessions to “Never,” and requires reauthentication every hour. This reduces the risk of unauthorized access from stale sessions, especially on unmanaged devices.
 
-Mandating password changes for high-risk accounts is a precautionary measure. This approach helps address the potential compromise of credentials, which might be indicated by breaches or other malicious activities. By requiring such changes, organizations can mitigate the risk of unauthorized access to sensitive systems and data, strengthening their overall security posture.
+Require reauthentication and disable browser persistence
 
-**o	BAS011-Allow-AllApps-Admins-PhisingResistentMFA**  
-(Require phishing-resistant multifactor authentication for administrators)
+**o BAS-005-2606-Allow-AllResources-AllUsers-MFAforRiskySignIns**
+(Require multifactor authentication for high-risk sign-in attempts)
 
-Implementing phishing-resistant MFA significantly reduces the likelihood of unauthorized access compared to traditional MFA. Unlike normal MFA, which relies on methods such as SMS codes or basic authentication apps, phishing-resistant MFA employs stronger mechanisms such as hardware-based security keys, biometrics, or certificate-based authentication. These methods are inherently resistant to common phishing techniques and ensure that attackers cannot bypass authentication even if credentials are compromised.
+**Description:** Requires MFA when Microsoft Entra ID Protection identifies a sign-in as high risk. Requiring users to reverify their identity during anomalous sign-ins helps interrupt illegitimate access attempts, even when a password has been compromised. If the user has not registered for MFA, the sign-in is blocked until registration or administrative remediation is completed.
+
+Require multifactor authentication for elevated sign-in risk
+
+**o BAS-006-2606-Allow-AllResources-AllUsers-PasswordChangeForHighRiskUsers**
+(Require password change for high-risk user accounts)
+
+**Description:** Requires users to change their password securely when Microsoft Entra ID Protection marks their account as high risk. Access to resources is blocked until the user resets the password and completes MFA, allowing the risk to be remediated. This helps limit damage from leaked or compromised credentials by ensuring they are rotated before further access is granted.
+
+Require remediation for risky users
+
+**o BAS-007-2606-Block-AllResources-AllUsers-RequireCompliantDevice**
+(Require compliant device for all user access)
+
+**Description:** Blocks access to cloud resources from devices that are not Intune compliant or hybrid Azure AD joined. The policy applies to internal users, with exclusions for emergency accounts and external or guest identities. Requiring device compliance helps prevent access from unmanaged or insecure endpoints; users on personal or non-compliant devices must enroll their device or use an approved access method.
+
+Require device compliance with Conditional Access
+
+**o BAS-008-2606-Block-AllResources-AllUsers-DeviceFlowAuthenticationTransfer**
+(Block device code flow and authentication token transfer)*
+
+**Description:** Blocks device code flow and authentication token transfer for all users. These flows can introduce bypass opportunities, especially in phishing scenarios or cross-device sign-ins. Blocking them helps ensure that authentication occurs through standard interactive methods governed by the organization’s Conditional Access controls.
+
+Block authentication flows with Conditional Access policy
+
+**o BAS-009-2606-Block-O365Apps-AllUsers-ElevatedInsiderRisk**
+(Block access to Microsoft 365 apps for users flagged with elevated insider risk)
+
+**Description:** Blocks access to Microsoft 365 applications when Microsoft Purview Insider Risk Management identifies a user with an elevated insider risk score. Insider risk signals can be used in Conditional Access decisions to restrict access when anomalous or risky activity is detected. This gives security teams time to investigate or require additional controls before normal access resumes. Prerequisite: Microsoft Purview Insider Risk Management must be enabled to generate the required risk signals.
+**o BAS-010-2606-Allow-O365-AllUsers-ApplicationEnforcedRestrictions**
+(Use application-enforced restrictions for Office 365 on unmanaged devices)
+
+**Description:** Applies application-enforced restrictions for Office 365 cloud apps, typically when accessed from unmanaged or non-compliant devices. Supported services such as SharePoint Online, OneDrive, and Outlook on the web can then provide limited web-only access, such as viewing without downloading. SharePoint and Exchange restrictions must be configured in advance. This approach protects corporate data on unmanaged endpoints by allowing controlled access instead of full access.
+
+Use application enforced restrictions for unmanaged devices
+
+**o BAS-011-2606-Allow-AllResources-AllUsers-SecureSecurityInfoRegistration**
+(Secure MFA & SSPR security info registration process)
+
+**Description:** Requires MFA when users register or change security information for MFA or Self-Service Password Reset (SSPR). The policy protects the “Register security info” user action and helps prevent attackers with only a password from adding or changing authentication methods. Typical exclusions include break-glass accounts, guests, and Global Administrators to avoid setup issues. Prerequisite: Combined registration for MFA and SSPR should be enabled.
+
+Protect security info registration with Conditional Access policy
+
+**o BAS-012-2606-Allow-O365Apps-AllUsers-ApplicationEnforcedRestrictions**
+(Enforce additional session controls for Office 365 applications)
+
+**Description:** Applies application-enforced restrictions to Office 365 apps, potentially together with an MFA requirement. This layered approach helps ensure that users accessing Office 365 from unmanaged or untrusted contexts meet strong authentication requirements while operating within limited application experiences. It works with configured cloud app restrictions to reduce data leakage risk on unmanaged devices.
 
 ![Picture5](/pics/Picture5.png) 
  
