@@ -2,8 +2,8 @@
 
 Version 2.0 Final
 
-Daniel Metzger
-Cloud Solution Architect Identity & Security
+Daniel Metzger,
+Cloud Solution Architect Identity & Security,
 Microsoft Switzerland GmbH
  
 ## About this Conditional Access Framework
