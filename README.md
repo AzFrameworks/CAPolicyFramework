@@ -30,9 +30,9 @@ A PowerShell script is included to support rapid deployment of this Conditional 
 
 - Named Locations for Region Restrictions: Two Entra ID named location lists:
 
--- "Countries allowed for admin access" – Approved countries or regions, such as US and CH, for privileged administrator sign-ins.
+- - "Countries allowed for admin access" – Approved countries or regions, such as US and CH, for privileged administrator sign-ins.
 
--- "Countries allowed for CHC data access" – Permitted countries or regions for highly confidential data access, used by Conditional Access policies.
+- - "Countries allowed for CHC data access" – Permitted countries or regions for highly confidential data access, used by Conditional Access policies.
 
 - Dynamic Group for Privileged Users: The "Secure Workstation Users" dynamic group for users whose UPN starts with "AZADM-", enabling policy scoping for privileged users.
 
