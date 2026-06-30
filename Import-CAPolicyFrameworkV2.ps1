@@ -7,9 +7,17 @@
               Authentication Extensibility Administrator, Authentication Policy Administrator,
               B2C IEF Keyset Administrator, Directory Writers, Domain Name Administrator,
               External Identity Provider Administrator, Lifecycle Workflows Administrator,
-              Security Reader, Agent ID Administrator, AI Administrator, AI Reader.
-              Note: Authentication Extensibility Password Administrator GUID pending tenant
-              verification — add manually to $adminRoleIds once confirmed.
+              Security Reader.
+    v2.2  — Aligned $adminRoleIds with $roles in Import-PIMSettings.ps1. Added 13 roles with
+              GUIDs confirmed from Microsoft Entra documentation: Agent ID Administrator,
+              AI Administrator, AI Reader, Authentication Extensibility Password Administrator,
+              Compliance Administrator, Compliance Data Administrator, Exchange Recipient
+              Administrator, External ID User Flow Administrator, External ID User Flow
+              Attribute Administrator, Identity Governance Administrator, Knowledge
+              Administrator, SharePoint Administrator, Teams Administrator.
+              Corrected mislabelled entry: 29232cdf is Exchange Administrator (was labelled
+              Exchange Recipient Administrator). $adminRoleIds now covers all 42 roles from
+              Import-PIMSettings.ps1.
 #>
 
 <#
@@ -440,12 +448,7 @@ if ([string]::IsNullOrEmpty($breakGlass1Id) -or [string]::IsNullOrEmpty($breakGl
 }
 
 # Privileged role GUIDs shared across BAS007, BAS011, PER001, PER003, PER004, PER005.
-# See https://learn.microsoft.com/entra/identity/role-based-access-control/permissions-reference
-# GUIDs verified against this tenant's live role definitions.
-# NOTE: four roles from the PIM list still need their GUIDs looked up and added here:
-#   Agent ID Administrator, AI Administrator, AI Reader,
-#   Authentication Extensibility Password Administrator
-# Run: Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?`$filter=displayName eq '<role name>'&`$select=id,displayName"
+# GUIDs verified against Microsoft Entra built-in roles documentation (learn.microsoft.com).
 $adminRoleIds = @(
     # --- Tier 1 ---
     '62e90394-69f5-4237-9190-012177145e10'  # Global Administrator
@@ -468,7 +471,7 @@ $adminRoleIds = @(
     '7698a772-787b-4ac8-901f-60d6b08affd2'  # Cloud Device Administrator
     '9360feb5-f418-4baa-8175-e2a00bac4301'  # Directory Writers
     '8329153b-31d0-4727-b945-745eb3bc5f31'  # Domain Name Administrator
-    '29232cdf-9323-42fd-ade2-1d097af3e4de'  # Exchange Recipient Administrator
+    '29232cdf-9323-42fd-ade2-1d097af3e4de'  # Exchange Administrator
     'be2f45a1-457d-42af-a067-6ec1fa63bc45'  # External Identity Provider Administrator
     'f2ef992c-3afb-46b9-b7cf-a126ee74c451'  # Global Reader
     'fdd7a751-b60b-444a-984c-02652fe8fa1c'  # Groups Administrator
@@ -478,6 +481,20 @@ $adminRoleIds = @(
     '5d6b6bb7-de71-4623-b4af-96380a352509'  # Security Reader
     '5f2222b1-57c3-48ba-8ad5-d4759f1fde6f'  # Security Operator
     'fe930be7-5e62-47db-91af-98c3a49a38b1'  # User Administrator
+    # --- v2.2 additions ---
+    'db506228-d27e-4b7d-95e5-295956d6615f'  # Agent ID Administrator
+    'd2562ede-74db-457e-a7b6-544e236ebb61'  # AI Administrator
+    '1fe13547-53f6-408d-ac04-7f8eed167b38'  # AI Reader
+    '0b00bede-4072-4d22-b441-e7df02a1ef63'  # Authentication Extensibility Password Administrator
+    '17315797-102d-40b4-93e0-432062caca18'  # Compliance Administrator
+    'e6d1a23a-da11-4be4-9570-befc86d067a7'  # Compliance Data Administrator
+    '31392ffb-586c-42d1-9346-e59415a2cc4e'  # Exchange Recipient Administrator
+    '6e591065-9bad-43ed-90f3-e9424366d2f0'  # External ID User Flow Administrator
+    '0f971eea-41eb-4569-a71e-57bb8a3eff1e'  # External ID User Flow Attribute Administrator
+    '45d8d3c5-c802-45c6-b32a-1d70b5e1e86e'  # Identity Governance Administrator
+    'b5a8dcf3-09d5-43a9-a639-8e29ef291470'  # Knowledge Administrator
+    'f28a1f50-f6e7-4571-818b-6a12f2af6b6c'  # SharePoint Administrator
+    '69091246-20e8-4a56-aa4d-066075b2a7a8'  # Teams Administrator
 )
 
 # Retrieve all existing CA policies once to avoid a separate API call per policy
