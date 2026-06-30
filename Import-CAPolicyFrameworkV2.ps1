@@ -44,21 +44,6 @@ function Install-RequiredModule {
     }
 }
 
-function New-RandomPassword {
-    # Generates a 20-char password meeting Entra ID complexity requirements
-    $charSets = @(
-        'ABCDEFGHJKLMNPQRSTUVWXYZ'
-        'abcdefghijkmnpqrstuvwxyz'
-        '23456789'
-        '!@#$%^&*'
-    )
-    $all = $charSets -join ''
-    # Guarantee at least one character from each set, then fill the rest randomly
-    $chars  = $charSets | ForEach-Object { $_[(Get-Random -Maximum $_.Length)] }
-    $chars += (1..16) | ForEach-Object { $all[(Get-Random -Maximum $all.Length)] }
-    -join ($chars | Get-Random -Count $chars.Count)
-}
-
 # Cache of existing CA policies populated once before the policy loop to avoid N API calls
 $script:existingPolicies = $null
 
@@ -221,17 +206,11 @@ if (-not (Get-MgDirectoryCustomSecurityAttributeDefinition | Where-Object { $_.N
 
 #region Break Glass Accounts
 
-# Break glass accounts are excluded from every CA policy to guarantee emergency tenant access.
-# Use the tenant's primary verified domain for the UPN suffix.
+# Break glass accounts must pre-exist — run Import-BreakGlassAccounts.ps1 to create them.
+# This region only resolves their object IDs for use as CA policy exclusions.
 $breakGlassDomain = (Get-MgDomain | Where-Object { $_.IsDefault }).Id
-
 $bgUPN1 = "BreakGlass1@$breakGlassDomain"
 $bgUPN2 = "BreakGlass2@$breakGlassDomain"
-
-# Invoke-MgGraphRequest returns a plain PSObject from raw JSON — every field is a NoteProperty
-# string that Set-StrictMode accepts without issue. All SDK-level type adapters are bypassed.
-$breakGlass1Id = $null
-$breakGlass2Id = $null
 
 function Get-MgUserIdByUpn {
     param([string]$Upn)
@@ -241,7 +220,6 @@ function Get-MgUserIdByUpn {
                  -OutputType PSObject -ErrorAction Stop
         return $r.id
     } catch {
-        # Request_ResourceNotFound (404) means user doesn't exist — not an error condition here
         if ($_.Exception.Message -notmatch 'Request_ResourceNotFound') {
             Write-Warning "Unexpected error looking up user '$Upn': $_"
         }
@@ -249,119 +227,20 @@ function Get-MgUserIdByUpn {
     }
 }
 
-# Helper: check soft-deleted users and emit actionable guidance
-function Resolve-SoftDeletedBgUser {
-    param([string]$Upn, [string]$Label)
-    try {
-        $del = Invoke-MgGraphRequest -Method GET `
-            -Uri "v1.0/directory/deletedItems/microsoft.graph.user?`$filter=userPrincipalName eq '$Upn'&`$select=id,userPrincipalName,deletedDateTime" `
-            -OutputType PSObject -ErrorAction Stop
-        if ($null -ne $del.value -and $del.value.Count -gt 0) {
-            $delId = $del.value[0].id
-            Write-Host "  [ACTION REQUIRED] $Label '$Upn' exists in soft-deleted state (ID: $delId)." -ForegroundColor Red
-            Write-Host "  Option A - Restore: Restore-MgDirectoryDeletedItem -DirectoryObjectId '$delId'" -ForegroundColor Yellow
-            Write-Host "  Option B - Permanent-delete then re-run: Remove-MgDirectoryDeletedItem -DirectoryObjectId '$delId'" -ForegroundColor Yellow
-        } else {
-            Write-Host "  [ACTION REQUIRED] $Label '$Upn' could not be created and was not found anywhere." -ForegroundColor Red
-            Write-Host "  Verify that the signed-in account has User.ReadWrite.All permission." -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARN] Could not query soft-deleted items (check Directory.Read.All permission): $_" -ForegroundColor Yellow
-    }
-}
-
-# Create or retrieve Break Glass User 1
 $breakGlass1Id = Get-MgUserIdByUpn -Upn $bgUPN1
-if ($null -eq $breakGlass1Id) {
-    $bgPassword1 = New-RandomPassword
-    Write-Host "Creating Break Glass User 1 ($bgUPN1)..." -ForegroundColor Yellow
-    Write-Host "  *** SAVE NOW - Temp password: $bgPassword1 ***" -ForegroundColor Red
-    try {
-        $r = Invoke-MgGraphRequest -Method POST -Uri 'v1.0/users' -OutputType PSObject `
-                 -Body @{
-                     displayName       = 'Break Glass User 1'
-                     userPrincipalName = $bgUPN1
-                     mailNickname      = 'BreakGlass1'
-                     accountEnabled    = $true
-                     passwordProfile   = @{
-                         password                             = $bgPassword1
-                         forceChangePasswordNextSignIn        = $true
-                         forceChangePasswordNextSignInWithMfa = $true
-                     }
-                 } -ErrorAction Stop
-        $breakGlass1Id = $r.id
-    } catch {
-        Write-Host "  [ERROR] POST failed for Break Glass User 1: $_" -ForegroundColor Red
-        # Retry GET — creation may have failed due to a conflict (account exists but was not returned initially)
-        $breakGlass1Id = Get-MgUserIdByUpn -Upn $bgUPN1
-        if ($null -eq $breakGlass1Id) {
-            Resolve-SoftDeletedBgUser -Upn $bgUPN1 -Label 'Break Glass User 1'
-        } else {
-            Write-Host "  Break Glass User 1 resolved after conflict - account already existed." -ForegroundColor Green
-        }
-    }
-} else {
-    Write-Host "Break Glass User 1 already exists." -ForegroundColor Green
-}
-
-# Create or retrieve Break Glass User 2
 $breakGlass2Id = Get-MgUserIdByUpn -Upn $bgUPN2
-if ($null -eq $breakGlass2Id) {
-    $bgPassword2 = New-RandomPassword
-    Write-Host "Creating Break Glass User 2 ($bgUPN2)..." -ForegroundColor Yellow
-    Write-Host "  *** SAVE NOW - Temp password: $bgPassword2 ***" -ForegroundColor Red
-    try {
-        $r = Invoke-MgGraphRequest -Method POST -Uri 'v1.0/users' -OutputType PSObject `
-                 -Body @{
-                     displayName       = 'Break Glass User 2'
-                     userPrincipalName = $bgUPN2
-                     mailNickname      = 'BreakGlass2'
-                     accountEnabled    = $true
-                     passwordProfile   = @{
-                         password                             = $bgPassword2
-                         forceChangePasswordNextSignIn        = $true
-                         forceChangePasswordNextSignInWithMfa = $true
-                     }
-                 } -ErrorAction Stop
-        $breakGlass2Id = $r.id
-    } catch {
-        Write-Host "  [ERROR] POST failed for Break Glass User 2: $_" -ForegroundColor Red
-        # Retry GET — creation may have failed due to a conflict (account exists but was not returned initially)
-        $breakGlass2Id = Get-MgUserIdByUpn -Upn $bgUPN2
-        if ($null -eq $breakGlass2Id) {
-            Resolve-SoftDeletedBgUser -Upn $bgUPN2 -Label 'Break Glass User 2'
-        } else {
-            Write-Host "  Break Glass User 2 resolved after conflict - account already existed." -ForegroundColor Green
-        }
-    }
-} else {
-    Write-Host "Break Glass User 2 already exists." -ForegroundColor Green
+
+$missing = @()
+if ([string]::IsNullOrEmpty($breakGlass1Id)) { $missing += $bgUPN1 }
+if ([string]::IsNullOrEmpty($breakGlass2Id)) { $missing += $bgUPN2 }
+if ($missing) {
+    Write-Error ("Break glass account(s) not found: $($missing -join ', '). " +
+        "Run Import-BreakGlassAccounts.ps1 first, then re-run this script.")
+    exit 1
 }
 
-# Assign Global Administrator (62e90394-...) to both break glass accounts
-$globalAdminRoleId = '62e90394-69f5-4237-9190-012177145e10'
-foreach ($bgEntry in @(
-    @{ Id = $breakGlass1Id; Name = 'Break Glass User 1' }
-    @{ Id = $breakGlass2Id; Name = 'Break Glass User 2' }
-)) {
-    $hasRole = Get-MgRoleManagementDirectoryRoleAssignment |
-        Where-Object { $_.PrincipalId -eq $bgEntry.Id -and $_.RoleDefinitionId -eq $globalAdminRoleId }
-    if (-not $hasRole) {
-        Write-Host "Assigning 'Global Administrator' to $($bgEntry.Name)..." -ForegroundColor Yellow
-        try {
-            New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @{
-                '@odata.type'    = '#microsoft.graph.unifiedRoleAssignment'
-                RoleDefinitionId = $globalAdminRoleId
-                PrincipalId      = $bgEntry.Id
-                DirectoryScopeId = '/'
-            } | Out-Null
-        } catch {
-            Write-Warning "Failed to assign Global Administrator to $($bgEntry.Name): $_"
-        }
-    } else {
-        Write-Host "'Global Administrator' already assigned to $($bgEntry.Name)." -ForegroundColor Green
-    }
-}
+Write-Host "Break Glass User 1: $bgUPN1 ($breakGlass1Id)" -ForegroundColor Green
+Write-Host "Break Glass User 2: $bgUPN2 ($breakGlass2Id)" -ForegroundColor Green
 
 #endregion
 
@@ -411,41 +290,42 @@ if (-not $existingChcLoc) {
 
 #region Secure Workstation Users Group
 
-# Dynamic group targeting AZADM-* UPNs; used in CA policies that enforce PAW/CSC device requirements
-$secureGroupName = 'Secure Workstation Users'
+# In a PAW CSM tenant, PAW-Global-Users already exists and serves as the target group.
+# Use it directly; only fall back to creating Secure Workstation Users when it is absent.
+$pawGlobalUsers = Get-MgGroup -Filter "displayName eq 'PAW-Global-Users'" -ErrorAction SilentlyContinue |
+    Select-Object -First 1
 
-$existingSecureGroup = Get-MgGroup -Filter "displayName eq '$secureGroupName'" -ErrorAction SilentlyContinue
-if (-not $existingSecureGroup) {
-    Write-Host "Creating dynamic group '$secureGroupName'..." -ForegroundColor Yellow
-    try {
-        $secureGroupId = (New-MgGroup -BodyParameter @{
-            Description                   = $secureGroupName
-            DisplayName                   = $secureGroupName
-            MailEnabled                   = $false
-            SecurityEnabled               = $true
-            MailNickName                  = 'SecureWorkstationsUsers'
-            GroupTypes                    = @('DynamicMembership')
-            MembershipRule                = '(user.userPrincipalName -startsWith "AZADM-")'
-            MembershipRuleProcessingState = 'On'
-        }).Id
-    } catch {
-        Write-Error "Failed to create secure workstation group: $_"
-    }
+if ($pawGlobalUsers) {
+    $secureGroupId = $pawGlobalUsers.Id
+    Write-Host "Using existing group 'PAW-Global-Users' (ID: $secureGroupId) for CA policy assignments." -ForegroundColor Green
 } else {
-    $secureGroupId = $existingSecureGroup.Id
-    Write-Host "Group '$secureGroupName' already exists." -ForegroundColor Green
+    $secureGroupName = 'Secure Workstation Users'
+    $existingSecureGroup = Get-MgGroup -Filter "displayName eq '$secureGroupName'" -ErrorAction SilentlyContinue
+    if (-not $existingSecureGroup) {
+        Write-Host "Creating dynamic group '$secureGroupName'..." -ForegroundColor Yellow
+        try {
+            $secureGroupId = (New-MgGroup -BodyParameter @{
+                Description                   = $secureGroupName
+                DisplayName                   = $secureGroupName
+                MailEnabled                   = $false
+                SecurityEnabled               = $true
+                MailNickName                  = 'SecureWorkstationsUsers'
+                GroupTypes                    = @('DynamicMembership')
+                MembershipRule                = '(user.userPrincipalName -startsWith "AZADM-")'
+                MembershipRuleProcessingState = 'On'
+            }).Id
+        } catch {
+            Write-Error "Failed to create secure workstation group: $_"
+        }
+    } else {
+        $secureGroupId = $existingSecureGroup.Id
+        Write-Host "Group '$secureGroupName' already exists." -ForegroundColor Green
+    }
 }
 
 #endregion
 
 #region Conditional Access Policies
-
-# Hard stop — both IDs must be valid GUIDs before creating any policy.
-# A null ID in excludeUsers sends an empty string to the Graph API (error 1054).
-if ([string]::IsNullOrEmpty($breakGlass1Id) -or [string]::IsNullOrEmpty($breakGlass2Id)) {
-    Write-Error "Break glass user IDs could not be resolved (BG1='$breakGlass1Id' BG2='$breakGlass2Id'). Resolve the account lookup issue before creating CA policies."
-    exit 1
-}
 
 # Privileged role GUIDs shared across BAS007, BAS011, PER001, PER003, PER004, PER005.
 # GUIDs verified against Microsoft Entra built-in roles documentation (learn.microsoft.com).
