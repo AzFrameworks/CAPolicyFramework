@@ -20,27 +20,25 @@ The framework provides guidance for configuring essential Conditional Access pol
 
 A PowerShell script is included to support rapid deployment of this Conditional Access framework. The script automates policy creation, helping ensure consistent and efficient application of access policies. The script creates:
 
-Prerequisite Modules & Graph Setup: Required Microsoft Graph PowerShell modules and a Microsoft Graph connection with the scopes needed to create the later resources.
+- Prerequisite Modules & Graph Setup: Required Microsoft Graph PowerShell modules and a Microsoft Graph connection with the scopes needed to create the later resources.
 
-Role Assignment for Attribute Management: Assignment of the "Attribute Definition Administrator" role to the current user if it is missing.
+- Role Assignment for Attribute Management: Assignment of the "Attribute Definition Administrator" role to the current user if it is missing.
 
-Custom Security Attribute & Set: The "DataSensitivity" attribute set and the "Classification" attribute with the values Highly Confidential, Confidential, General, Public, and Non-Business for Conditional Access targeting.
+- Custom Security Attribute & Set: The "DataSensitivity" attribute set and the "Classification" attribute with the values Highly Confidential, Confidential, General, Public, and Non-Business for Conditional Access targeting.
 
-Break Glass (Emergency Access) Accounts: Two emergency access accounts with strong random passwords, first sign-in password change, MFA enforcement, and Global Administrator access for recovery scenarios.
+- Break Glass (Emergency Access) Accounts: Two emergency access accounts with strong random passwords, first sign-in password change, MFA enforcement, and Global Administrator access for recovery scenarios.
 
-Named Locations for Region Restrictions: Two Entra ID named location lists:
+- Named Locations for Region Restrictions: Two Entra ID named location lists:
 
-- "Countries allowed for admin access" – Approved countries or regions, such as US and CH, for privileged administrator sign-ins.
+-- "Countries allowed for admin access" – Approved countries or regions, such as US and CH, for privileged administrator sign-ins.
 
-- "Countries allowed for CHC data access" – Permitted countries or regions for highly confidential data access, used by Conditional Access policies.
+-- "Countries allowed for CHC data access" – Permitted countries or regions for highly confidential data access, used by Conditional Access policies.
 
-Dynamic Group for Privileged Users: The "Secure Workstation Users" dynamic group for users whose UPN starts with "AZADM-", enabling policy scoping for privileged users.
+- Dynamic Group for Privileged Users: The "Secure Workstation Users" dynamic group for users whose UPN starts with "AZADM-", enabling policy scoping for privileged users.
 
-Device Filter Attribute (PAW Marker): A custom device attribute, such as extensionAttribute1 = "PAW", to identify Privileged Access Workstation devices and enforce privileged access only from approved devices.
+- Device Filter Attribute (PAW Marker): A custom device attribute, such as extensionAttribute1 = "PAW", to identify Privileged Access Workstation devices and enforce privileged access only from approved devices.
 
-Conditional Access Policies Deployment: PAW-aligned BAS (Baseline), DLP (Data Loss Prevention), and PER (Personas) Conditional Access policies in report-only mode, using the created artifacts to restrict privileged access to compliant PAWs, strong authentication, low-risk signals, and approved locations.
-
-
+- Conditional Access Policies Deployment: PAW-aligned BAS (Baseline), DLP (Data Loss Prevention), and PER (Personas) Conditional Access policies in report-only mode, using the created artifacts to restrict privileged access to compliant PAWs, strong authentication, low-risk signals, and approved locations.
  
 ## The Conditional Access funnel model
 
