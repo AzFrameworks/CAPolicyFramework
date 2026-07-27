@@ -1,8 +1,8 @@
 ![Picture1](/pics/EUD_Conditional_Access_Signals_Diagram_preview.png)
 
-*Secure Conditional Access Baseline Starter Kit**
+# Secure Conditional Access Baseline Starter Kit**
 
-**Disclaimer**
+## Disclaimer
 
 This Secure Conditional Access Baseline Starter Kit is provided as implementation guidance and sample automation only. It is not a substitute for an organization-specific security, legal, compliance, privacy, licensing, or operational assessment. Conditional Access policies, exclusions, named locations, authentication strengths, application and device filters, role scopes, and deployment states must be reviewed and adapted to the target tenant before use.
 
