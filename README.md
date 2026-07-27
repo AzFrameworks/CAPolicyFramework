@@ -1,5 +1,3 @@
-![Picture1](/pics/EUD_Conditional_Access_Signals_Diagram_preview.png)
-
 # Secure Conditional Access Baseline Starter Kit
 
 ## Disclaimer
@@ -16,6 +14,7 @@ The provided PowerShell script in this repo implements a layered Microsoft Entra
 
 The target state is a tenant where baseline controls protect all users, privileged roles receive stronger authentication and device requirements, Confidential / Highly Confidential applications are protected through custom security attribute targeting, guest access is constrained, and workload identities / agent-related access paths are brought into the Conditional Access model. The script explicitly warns that policies must be reviewed before moving from test/simulation states to enforcement and that Endpoint DLP indicators, IRM triggering events, and Adaptive Protection bindings require portal-side configuration steps.
 
+![Picture1](/pics/bd8dad8661.png)
 
 Figure 1: Layered Microsoft Entra Conditional Access target-state architecture showing identity, device, location, risk, app classification, guest, workload-identity, and operational rollout relationships.
 
