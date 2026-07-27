@@ -1,6 +1,6 @@
 ![Picture1](/pics/EUD_Conditional_Access_Signals_Diagram_preview.png)
 
-# Secure Conditional Access Baseline Starter Kit**
+# Secure Conditional Access Baseline Starter Kit
 
 ## Disclaimer
 
@@ -10,7 +10,7 @@ Test all changes in a non-production environment and validate them in report-onl
 
 [Microsoft Entra Conditional Access documentation - Microsoft Entra ID | Microsoft Learn](https://learn.microsoft.com/en-us/entra/identity/conditional-access/)
 
-**Summary**
+## Summary
 
 The provided PowerShell script in this repo implements a layered Microsoft Entra Conditional Access security framework rather than a standalone script outcome: it creates or references custom security attributes, break-glass accounts, named locations, secure workstation targeting, privileged role scopes, identity-risk controls, insider-risk controls, workload-identity protections, guest restrictions, and app/data-classification-based access policies. Microsoft describes Conditional Access as the policy engine that combines signals such as user, device, and location to automate access decisions and enforce organizational policy; the framework uses that model as the tenant’s Zero Trust access-control plane.
 
@@ -19,7 +19,7 @@ The target state is a tenant where baseline controls protect all users, privileg
 
 Figure 1: Layered Microsoft Entra Conditional Access target-state architecture showing identity, device, location, risk, app classification, guest, workload-identity, and operational rollout relationships.
 
-**Architecture Principles and Trust Boundaries**
+## Architecture Principles and Trust Boundaries
 
 The framework implements four trust boundaries:
 
@@ -32,7 +32,7 @@ Device trust is central to the design. Microsoft’s Conditional Access device-f
 
 Location trust is implemented with country named locations for admin access and CHC data access, both allowing US and CH and excluding unknown countries/regions; Microsoft documents country/region and IP named locations as Conditional Access network signals. Administrators must align the allowed countries to their desired locations before going into production.
 
-**Component Inventory**
+## Component Inventory
 
 | Component | Target-state outcome | Operational dependency |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Location trust is implemented with country named locations for admin access and 
 | Secure workstation group | Uses existing PAW-Global-Users security group; if absent, falls back to Secure Workstation Users. The PAW-Global-Users security group is extensively used in another, private framework for Privileged Access Workstations. | PAW/secure workstation lifecycle, device compliance, and extension attributes must be maintained. |
 | Admin role scope | Targets a broad privileged role set; version history states v2.2 aligns with 42 roles which are marked as Privileged in Entra ID. | Review role list against tenant privileged-access standard. |
 
-**Conditional Access Control Catalog**
+## Conditional Access Control Catalog
 
 The catalog below lists the Conditional Access policies included in the Secure Conditional Access Baseline Starter Kit. Break-glass accounts refer to BreakGlass1 and BreakGlass2, which are excluded throughout the framework.
 
@@ -184,7 +184,7 @@ The catalog below lists the Conditional Access policies included in the Secure C
     -   Population and exclusions: Guests/external users; excludes break-glass accounts.
     -   State / rollout note: Verify final state.
 
-**Implementation Prerequisites and Assumptions**
+## Implementation Prerequisites and Assumptions
 
 The tenant must have Microsoft Entra Conditional Access capability; Microsoft states a working tenant with Entra ID P1/P2 or trial licensing is a prerequisite, and Entra ID P2 is required to include Identity Protection risk in Conditional Access policies. The framework’s risk-based policies assume Entra ID Protection can provide high sign-in risk and high user risk, and Microsoft’s ID Protection deployment guidance states risk data can feed Conditional Access decisions and requires P2 for ID Protection deployment.
 
@@ -194,7 +194,7 @@ For data-protection targeting, applications must exist as service principals and
 
 Workload identity protection requires Microsoft Entra Workload ID Premium to create or modify policies scoped to service principals; Microsoft also notes workload identity policies cover service principals owned by the organization and don’t cover managed identities or multitenant SaaS apps. Insider-risk controls require Microsoft Purview Adaptive Protection / Insider Risk Management integration; Microsoft states Adaptive Protection can dynamically apply Conditional Access controls based on insider risk levels and that Conditional Access with insider risk requires Entra ID P2.
 
-**Operational Considerations, Limitations, and Rollout Guidance**
+## Operational Considerations, Limitations, and Rollout Guidance
 
 Rollout model. Treat the framework as a staged deployment. The script explicitly advises testing in a non-production tenant and reviewing all policies before switching from TestWithNotifications / Simulation to enforce mode. Microsoft states report-only mode evaluates most Conditional Access policies during sign-in without enforcing them and logs results in sign-in details; after validation, policies can be moved from Report-only to On. Microsoft also warns that report-only policies requiring compliant devices can still prompt macOS, iOS, and Android users for device certificates, even though compliance isn’t enforced.
 
@@ -204,7 +204,7 @@ Break-glass operations. Emergency access accounts must remain excluded from enfo
 
 Known limitations and validation points. Validate that the US and CH country allowlists match the tenant’s real business and regulatory operating model; Microsoft notes locations are based on public IP/GPS signals and policies apply after first-factor authentication, not as a frontline DoS defense. Validate that app-enforced restrictions are configured on the relevant Microsoft 365 workloads, because the script references app-enforced restrictions for Office 365, SharePoint, and OneDrive while also noting portal-side configuration dependencies. Validate PER007/PER008 behavior in the tenant because the script has explicit license-skip behavior for Workload ID Premium and preview/fallback behavior for agent-scope conditions.
 
-**Implementation Guidance for Administrators**
+## Implementation Guidance for Administrators
 
 1.  Pre-stage dependencies: create and monitor BreakGlass1 and BreakGlass2, verify Conditional Access Administrator / Attribute Definition Administrator permissions, confirm Graph consent, and validate the required Microsoft Graph modules and NuGet installation path.
 2.  Prepare identity and device signals: configure MFA and phishing-resistant methods, establish Intune compliance baselines, populate PAW/CSC device extension attributes, and define trusted / allowed network and country locations.
