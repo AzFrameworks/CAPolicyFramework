@@ -13,9 +13,7 @@ Test all changes in a non-production environment and validate them in report-onl
 The provided PowerShell script in this repo implements a layered Microsoft Entra Conditional Access security framework rather than a standalone script outcome: it creates or references custom security attributes, break-glass accounts, named locations, secure workstation targeting, privileged role scopes, identity-risk controls, insider-risk controls, workload-identity protections, guest restrictions, and app/data-classification-based access policies. Microsoft describes Conditional Access as the policy engine that combines signals such as user, device, and location to automate access decisions and enforce organizational policy; the framework uses that model as the tenant’s Zero Trust access-control plane.
 
 The target state is a tenant where baseline controls protect all users, privileged roles receive stronger authentication and device requirements, Confidential / Highly Confidential applications are protected through custom security attribute targeting, guest access is constrained, and workload identities / agent-related access paths are brought into the Conditional Access model. The script explicitly warns that policies must be reviewed before moving from test/simulation states to enforcement and that Endpoint DLP indicators, IRM triggering events, and Adaptive Protection bindings require portal-side configuration steps.
-
 ![Picture1](/pics/bd8dad8661.png)
-
 Figure 1: Layered Microsoft Entra Conditional Access target-state architecture showing identity, device, location, risk, app classification, guest, workload-identity, and operational rollout relationships.
 
 ## Architecture Principles and Trust Boundaries
