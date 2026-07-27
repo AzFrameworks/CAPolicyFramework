@@ -1,6 +1,6 @@
 ![Picture1](/pics/EUD_Conditional_Access_Signals_Diagram_preview.png)
 
-**Secure Conditional Access Baseline Starter Kit**
+*Secure Conditional Access Baseline Starter Kit**
 
 **Disclaimer**
 
