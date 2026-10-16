@@ -36,18 +36,29 @@ DISCLAIMER
 
 function Install-RequiredModule {
     param([string]$Name)
-    if (-not (Get-Module -ListAvailable -Name $Name)) {
-        Write-Host "Installing module '$Name'..." -ForegroundColor Yellow
-        Install-Module -Name $Name -Force -AllowClobber
+    $pinned = $script:graphPinnedVersion
+
+    # Install only if the required version is not yet available on disk
+    $available = Get-Module -ListAvailable -Name $Name
+    $atVersion = if ($pinned) { $available | Where-Object { $_.Version.ToString() -eq $pinned } } else { $available }
+    if (-not $atVersion) {
+        $installParams = @{ Name = $Name; Force = $true; AllowClobber = $true }
+        if ($pinned) { $installParams['RequiredVersion'] = $pinned }
+        Write-Host "Installing module '$Name'$(if ($pinned) { " v$pinned" })..." -ForegroundColor Yellow
+        Install-Module @installParams
     } else {
         Write-Host "Module '$Name' is already installed." -ForegroundColor Green
     }
+
+    # Import only if not yet loaded — use pinned version to avoid assembly conflicts
     if (-not (Get-Module -Name $Name)) {
+        $importParams = @{ Name = $Name; ErrorAction = 'Stop' }
+        if ($pinned) { $importParams['RequiredVersion'] = $pinned }
         try {
-            Import-Module -Name $Name -ErrorAction Stop
+            Import-Module @importParams
         }
         catch [System.IO.FileLoadException] {
-            Write-Warning "Module '$Name': a different version is already loaded in this session. Continuing with the loaded version."
+            Write-Warning "Module '$Name': assembly conflict at v$pinned — continuing with currently loaded version."
         }
     }
 }
@@ -116,6 +127,15 @@ if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
 } else {
     Write-Host "Package provider 'NuGet' is already installed." -ForegroundColor Green
+}
+
+# If any Microsoft.Graph module is already loaded, pin all modules to that version.
+# Mixing versions causes FileLoadException because only one assembly version can live in the AppDomain.
+$script:graphPinnedVersion = (Get-Module -Name 'Microsoft.Graph.Authentication')?.Version?.ToString()
+if ($script:graphPinnedVersion) {
+    Write-Host "Microsoft.Graph.Authentication v$script:graphPinnedVersion already loaded — pinning all Graph modules to this version." -ForegroundColor Yellow
+} else {
+    $script:graphPinnedVersion = $null
 }
 
 @(
