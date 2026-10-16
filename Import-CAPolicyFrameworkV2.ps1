@@ -42,6 +42,29 @@ function Install-RequiredModule {
     } else {
         Write-Host "Module '$Name' is already installed." -ForegroundColor Green
     }
+    if (-not (Get-Module -Name $Name)) {
+        try {
+            Import-Module -Name $Name -ErrorAction Stop
+        }
+        catch [System.IO.FileLoadException] {
+            Write-Warning "Module '$Name': a different version is already loaded in this session. Continuing with the loaded version."
+        }
+    }
+}
+
+function Get-MgUserIdByUpn {
+    param([string]$Upn)
+    try {
+        $r = Invoke-MgGraphRequest -Method GET `
+                 -Uri "v1.0/users/$([System.Uri]::EscapeDataString($Upn))?`$select=id" `
+                 -OutputType PSObject -ErrorAction Stop
+        return $r.id
+    } catch {
+        if ($_.Exception.Message -notmatch 'Request_ResourceNotFound') {
+            Write-Warning "Unexpected error looking up user '$Upn': $_"
+        }
+        return $null
+    }
 }
 
 # Cache of existing CA policies populated once before the policy loop to avoid N API calls
@@ -206,41 +229,253 @@ if (-not (Get-MgDirectoryCustomSecurityAttributeDefinition | Where-Object { $_.N
 
 #region Break Glass Accounts
 
-# Break glass accounts must pre-exist — run Import-BreakGlassAccounts.ps1 to create them.
-# This region only resolves their object IDs for use as CA policy exclusions.
-$breakGlassDomain = (Get-MgDomain | Where-Object { $_.IsDefault }).Id
-$bgUPN1 = "BreakGlass1@$breakGlassDomain"
-$bgUPN2 = "BreakGlass2@$breakGlassDomain"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
-function Get-MgUserIdByUpn {
-    param([string]$Upn)
-    try {
-        $r = Invoke-MgGraphRequest -Method GET `
-                 -Uri "v1.0/users/$([System.Uri]::EscapeDataString($Upn))?`$select=id" `
-                 -OutputType PSObject -ErrorAction Stop
-        return $r.id
-    } catch {
-        if ($_.Exception.Message -notmatch 'Request_ResourceNotFound') {
-            Write-Warning "Unexpected error looking up user '$Upn': $_"
-        }
-        return $null
+$globalAdminRoleId = '62e90394-69f5-4237-9190-012177145e10'
+
+#── Auto-detect break glass candidates ───────────────────────────────────────
+Write-Host 'Scanning for break glass accounts...' -ForegroundColor Yellow
+$bgCandidateMap = [System.Collections.Generic.Dictionary[string,string]]::new() # id → UPN
+
+# Standing (non-PIM) Global Administrator assignments
+try {
+    $gaAssignments = Get-MgRoleManagementDirectoryRoleAssignment `
+        -Filter "roleDefinitionId eq '$globalAdminRoleId'" -All `
+        -Property 'principalId' -ErrorAction SilentlyContinue
+    foreach ($a in $gaAssignments) {
+        try {
+            $u = Get-MgUser -UserId $a.PrincipalId -Property 'id,userPrincipalName' -ErrorAction SilentlyContinue
+            if ($u -and -not $bgCandidateMap.ContainsKey($u.Id)) { $bgCandidateMap[$u.Id] = $u.UserPrincipalName }
+        } catch {}
     }
+} catch { Write-Warning "Could not query standing Global Admin assignments: $_" }
+
+# UPN name patterns common for break glass accounts
+try {
+    $upnFilter = "startsWith(userPrincipalName,'BreakGlass') or startsWith(userPrincipalName,'bg-') or " +
+                 "startsWith(userPrincipalName,'emrg-') or startsWith(userPrincipalName,'emergency-')"
+    $r = Invoke-MgGraphRequest -Method GET `
+        -Uri "v1.0/users?`$filter=$upnFilter&`$select=id,userPrincipalName&`$top=20" -ErrorAction SilentlyContinue
+    foreach ($u in $r.value) {
+        if (-not $bgCandidateMap.ContainsKey($u.id)) { $bgCandidateMap[$u.id] = $u.userPrincipalName }
+    }
+} catch {}
+
+# DisplayName search
+try {
+    $r2 = Invoke-MgGraphRequest -Method GET `
+        -Uri 'v1.0/users?$search="displayName:Break Glass" OR "displayName:Emergency Access"&$select=id,userPrincipalName&$top=10' `
+        -Headers @{ 'ConsistencyLevel' = 'eventual' } -ErrorAction SilentlyContinue
+    foreach ($u in $r2.value) {
+        if (-not $bgCandidateMap.ContainsKey($u.id)) { $bgCandidateMap[$u.id] = $u.userPrincipalName }
+    }
+} catch {}
+
+# Exclude the operator's own account
+try {
+    $opId = (Get-MgUser -UserId (Get-MgContext).Account -Property 'id' -ErrorAction SilentlyContinue).Id
+    if ($opId) { $bgCandidateMap.Remove($opId) | Out-Null }
+} catch {}
+
+$detectedUpns = @($bgCandidateMap.Values | Sort-Object | Select-Object -First 3)
+Write-Host "  Detected $($detectedUpns.Count) potential break glass account(s)." `
+    -ForegroundColor $(if ($detectedUpns.Count) { 'Green' } else { 'DarkGray' })
+
+#── Build form ────────────────────────────────────────────────────────────────
+$bgForm                 = New-Object System.Windows.Forms.Form
+$bgForm.Text            = 'Break Glass Account Setup'
+$bgForm.ClientSize      = New-Object System.Drawing.Size(540, 315)
+$bgForm.StartPosition   = 'CenterScreen'
+$bgForm.FormBorderStyle = 'FixedDialog'
+$bgForm.MaximizeBox     = $false
+$bgForm.MinimizeBox     = $false
+$bgForm.TopMost         = $true
+
+$lblDesc          = New-Object System.Windows.Forms.Label
+$lblDesc.Text     = if ($detectedUpns.Count) {
+    "Fields pre-populated from scan (standing Global Admin / name pattern) — review and edit as needed.`nCheck 'Create' to create a new account with the typed UPN (max. 2). Leave blank to skip."
+} else {
+    "No break glass accounts detected automatically. Enter UPNs manually.`nCheck 'Create' to create a new account with the typed UPN (max. 2). Leave blank to skip."
+}
+$lblDesc.Location = New-Object System.Drawing.Point(12, 12)
+$lblDesc.Size     = New-Object System.Drawing.Size(516, 56)
+$bgForm.Controls.Add($lblDesc)
+
+$lblHdrCreate          = New-Object System.Windows.Forms.Label
+$lblHdrCreate.Text     = 'Create'
+$lblHdrCreate.Location = New-Object System.Drawing.Point(454, 76)
+$lblHdrCreate.AutoSize = $true
+$bgForm.Controls.Add($lblHdrCreate)
+
+$tbUpns     = @()
+$chkCreates = @()
+for ($i = 0; $i -lt 3; $i++) {
+    $y = 89 + $i * 34
+
+    $lbl          = New-Object System.Windows.Forms.Label
+    $lbl.Text     = "Break Glass Account $($i + 1):"
+    $lbl.Location = New-Object System.Drawing.Point(12, ($y + 3))
+    $lbl.AutoSize = $true
+    $bgForm.Controls.Add($lbl)
+
+    $tb          = New-Object System.Windows.Forms.TextBox
+    $tb.Location = New-Object System.Drawing.Point(188, $y)
+    $tb.Width    = 250
+    if ($i -lt $detectedUpns.Count) { $tb.Text = $detectedUpns[$i] }
+    $bgForm.Controls.Add($tb)
+    $tbUpns += $tb
+
+    $chk          = New-Object System.Windows.Forms.CheckBox
+    $chk.Location = New-Object System.Drawing.Point(452, ($y + 1))
+    $chk.Width    = 20
+    $bgForm.Controls.Add($chk)
+    $chkCreates += $chk
 }
 
-$breakGlass1Id = Get-MgUserIdByUpn -Upn $bgUPN1
-$breakGlass2Id = Get-MgUserIdByUpn -Upn $bgUPN2
+$chkGA          = New-Object System.Windows.Forms.CheckBox
+$chkGA.Text     = 'Assign created accounts to Global Administrator (standing member)'
+$chkGA.Location = New-Object System.Drawing.Point(12, 201)
+$chkGA.Width    = 516
+$bgForm.Controls.Add($chkGA)
 
-$missing = @()
-if ([string]::IsNullOrEmpty($breakGlass1Id)) { $missing += $bgUPN1 }
-if ([string]::IsNullOrEmpty($breakGlass2Id)) { $missing += $bgUPN2 }
-if ($missing) {
-    Write-Error ("Break glass account(s) not found: $($missing -join ', '). " +
-        "Run Import-BreakGlassAccounts.ps1 first, then re-run this script.")
+$btnOK          = New-Object System.Windows.Forms.Button
+$btnOK.Text     = 'OK'
+$btnOK.Location = New-Object System.Drawing.Point(340, 273)
+$btnOK.Size     = New-Object System.Drawing.Size(85, 28)
+$bgForm.Controls.Add($btnOK)
+$bgForm.AcceptButton = $btnOK
+
+$btnCancel              = New-Object System.Windows.Forms.Button
+$btnCancel.Text         = 'Cancel'
+$btnCancel.Location     = New-Object System.Drawing.Point(440, 273)
+$btnCancel.Size         = New-Object System.Drawing.Size(85, 28)
+$btnCancel.DialogResult = 'Cancel'
+$bgForm.Controls.Add($btnCancel)
+$bgForm.CancelButton = $btnCancel
+
+$btnOK.Add_Click({
+    $createCount = ($chkCreates | Where-Object { $_.Checked }).Count
+    if ($createCount -gt 2) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "At most 2 break glass accounts can be created.`nPlease uncheck one 'Create' option.",
+            'Validation', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        return
+    }
+    for ($j = 0; $j -lt 3; $j++) {
+        if ($chkCreates[$j].Checked -and [string]::IsNullOrWhiteSpace($tbUpns[$j].Text)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Break Glass Account $($j + 1): enter a UPN before checking 'Create'.",
+                'Validation', [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+            return
+        }
+    }
+    $bgForm.DialogResult = [System.Windows.Forms.DialogResult]::OK
+})
+
+if ($bgForm.ShowDialog() -ne 'OK') {
+    Write-Warning 'Break glass setup cancelled — aborting.'
+    Disconnect-MgGraph | Out-Null
     exit 1
 }
 
-Write-Host "Break Glass User 1: $bgUPN1 ($breakGlass1Id)" -ForegroundColor Green
-Write-Host "Break Glass User 2: $bgUPN2 ($breakGlass2Id)" -ForegroundColor Green
+#── Resolve / create ──────────────────────────────────────────────────────────
+$assignGA         = $chkGA.Checked
+$breakGlassAllIds = @()
+$createdPasswords = [ordered]@{}
+
+for ($i = 0; $i -lt 3; $i++) {
+    $upn      = $tbUpns[$i].Text.Trim()
+    $doCreate = $chkCreates[$i].Checked
+    $slot     = $i + 1
+
+    if ([string]::IsNullOrWhiteSpace($upn)) { continue }
+
+    if ($doCreate) {
+        $existId = Get-MgUserIdByUpn -Upn $upn
+        if ($existId) {
+            Write-Host "  Break glass $slot '$upn' already exists — using existing account." -ForegroundColor Yellow
+            $breakGlassAllIds += $existId
+        }
+        else {
+            $upper   = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZ'
+            $lower   = [char[]]'abcdefghjkmnpqrstuvwxyz'
+            $digits  = [char[]]'23456789'
+            $special = [char[]]'!@#$%^&*'
+            $all     = $upper + $lower + $digits + $special
+            $pwdChars = @(
+                ($upper   | Get-Random)
+                ($lower   | Get-Random)
+                ($digits  | Get-Random)
+                ($special | Get-Random)
+            ) + (1..20 | ForEach-Object { $all | Get-Random })
+            $password    = ($pwdChars | Get-Random -Count $pwdChars.Count) -join ''
+            $displayName = ($upn -split '@')[0]
+
+            Write-Host "  Creating break glass account $slot : $upn ..." -ForegroundColor Yellow
+            try {
+                $newUser = New-MgUser -BodyParameter @{
+                    DisplayName       = $displayName
+                    UserPrincipalName = $upn
+                    MailNickname      = ($displayName -replace '[^a-zA-Z0-9]', '')
+                    AccountEnabled    = $true
+                    PasswordProfile   = @{
+                        Password                      = $password
+                        ForceChangePasswordNextSignIn = $false
+                    }
+                    PasswordPolicies  = 'DisablePasswordExpiration'
+                }
+                Write-Host "    Created: $upn ($($newUser.Id))" -ForegroundColor Green
+                $breakGlassAllIds     += $newUser.Id
+                $createdPasswords[$upn] = $password
+
+                if ($assignGA) {
+                    try {
+                        New-MgRoleManagementDirectoryRoleAssignment -BodyParameter @{
+                            '@odata.type'    = '#microsoft.graph.unifiedRoleAssignment'
+                            RoleDefinitionId = $globalAdminRoleId
+                            PrincipalId      = $newUser.Id
+                            DirectoryScopeId = '/'
+                        } | Out-Null
+                        Write-Host "    Assigned Global Administrator (standing member)" -ForegroundColor Green
+                    }
+                    catch { Write-Warning "    Failed to assign Global Administrator to $upn : $_" }
+                }
+            }
+            catch { Write-Warning "  Failed to create break glass account '$upn': $_" }
+        }
+    }
+    else {
+        $id = Get-MgUserIdByUpn -Upn $upn
+        if ($id) {
+            Write-Host "  Break glass $slot found: $upn ($id)" -ForegroundColor Green
+            $breakGlassAllIds += $id
+        }
+        else {
+            Write-Warning "  Break glass $slot UPN not found: $upn — skipping."
+        }
+    }
+}
+
+if ($breakGlassAllIds.Count -eq 0) {
+    Write-Error 'No break glass accounts resolved or created — aborting.'
+    Disconnect-MgGraph | Out-Null
+    exit 1
+}
+
+if ($createdPasswords.Count -gt 0) {
+    $msg = "The following break glass accounts were created.`nStore these credentials securely before clicking OK:`n`n"
+    foreach ($kv in $createdPasswords.GetEnumerator()) {
+        $msg += "  UPN:      $($kv.Key)`n  Password: $($kv.Value)`n`n"
+    }
+    [System.Windows.Forms.MessageBox]::Show($msg, 'Break Glass Credentials — STORE SECURELY',
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+}
+
+Write-Host "`n$($breakGlassAllIds.Count) break glass account(s) configured for CA policy exclusions." -ForegroundColor Green
 
 #endregion
 
@@ -388,7 +623,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-001-2606-Block-AllResources-AllUsers-L
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications   = @{ includeApplications = 'All' }
-        Users          = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users          = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         clientAppTypes = @('exchangeActiveSync', 'other')
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -402,7 +637,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-002-2606-Allow-AllResources-AllUsers-R
         Applications = @{ includeApplications = 'All' }
         Users        = @{
             includeUsers = 'All'
-            excludeUsers = @($breakGlass1Id, $breakGlass2Id)
+            excludeUsers = $breakGlassAllIds
             excludeRoles = 'd29b2b05-8046-44ba-8758-1e26182fcf32'  # Directory Synchronization Accounts
         }
     }
@@ -415,7 +650,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-003-2606-Block-AllResources-AllUsers-U
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = @{ includeApplications = 'All' }
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         Platforms    = @{
             includePlatforms = @('all')
             excludePlatforms = @('android', 'iOS', 'windowsPhone', 'windows', 'macOS', 'linux')
@@ -430,7 +665,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-004-2606-Allow-AllResources-AllUsers-N
     State           = 'EnabledForReportingButNotEnforced'
     Conditions      = @{
         Applications = @{ includeApplications = 'All' }
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         Devices      = @{
             deviceFilter = @{
                 mode = 'include'
@@ -451,7 +686,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-005-2606-Allow-AllResources-AllUsers-M
     State           = 'EnabledForReportingButNotEnforced'
     Conditions      = @{
         Applications     = @{ includeApplications = 'All' }
-        Users            = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users            = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         signInRiskLevels = @('high')
     }
     GrantControls   = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
@@ -471,7 +706,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-006-2606-Allow-AllResources-AllUsers-P
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications   = @{ includeApplications = 'All' }
-        Users          = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users          = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         userRiskLevels = @('high')
     }
     GrantControls = @{ BuiltInControls = @('mfa', 'passwordChange'); Operator = 'AND' }
@@ -485,7 +720,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-007-2606-Block-AllResources-AllUsers-R
         Applications = @{ includeApplications = 'All' }
         Users        = @{
             includeUsers = 'All'
-            excludeUsers = @($breakGlass1Id, $breakGlass2Id, 'GuestsOrExternalUsers')
+            excludeUsers = ($breakGlassAllIds + @('GuestsOrExternalUsers'))
         }
         Devices      = @{ deviceFilter = @{ mode = 'exclude'; rule = 'device.isCompliant -eq True' } }
     }
@@ -498,7 +733,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-008-2606-Block-AllResources-AllUsers-D
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications        = @{ includeApplications = 'All' }
-        Users               = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users               = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         AuthenticationFlows = @{ transferMethods = 'deviceCodeFlow,authenticationTransfer' }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -510,7 +745,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-009-2606-Block-O365Apps-AllUsers-Eleva
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications      = @{ includeApplications = 'Office365' }
-        Users             = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users             = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         InsiderRiskLevels = 'elevated'
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -522,7 +757,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-010-2606-Allow-O365-AllUsers-Applicati
     State           = 'EnabledForReportingButNotEnforced'
     Conditions      = @{
         Applications   = @{ includeApplications = @('Office365') }
-        Users          = @{ includeUsers = @('All'); excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users          = @{ includeUsers = @('All'); excludeUsers = $breakGlassAllIds }
         clientAppTypes = @('all')
     }
     SessionControls = @{
@@ -538,7 +773,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-011-2606-Allow-AllResources-AllUsers-S
         Applications = @{ includeUserActions = 'urn:user:registersecurityinfo' }
         Users        = @{
             includeUsers = 'All'
-            excludeUsers = @($breakGlass1Id, $breakGlass2Id, 'GuestsOrExternalUsers')
+            excludeUsers = ($breakGlassAllIds + @('GuestsOrExternalUsers'))
             excludeRoles = '62e90394-69f5-4237-9190-012177145e10'  # Global Admins manage this policy; exclude to avoid lockout
         }
         Locations    = @{ includeLocations = 'All'; excludeLocations = 'AllTrusted' }
@@ -552,7 +787,7 @@ New-CAPolicyIfNotExists -DisplayName 'BAS-012-2606-Allow-O365Apps-AllUsers-Appli
     State           = 'EnabledForReportingButNotEnforced'
     Conditions      = @{
         Applications = @{ includeApplications = 'Office365' }
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
     }
     GrantControls   = @{ BuiltInControls = @('mfa'); Operator = 'OR' }
     SessionControls = @{ applicationEnforcedRestrictions = @{ isEnabled = $true } }
@@ -573,7 +808,7 @@ New-CAPolicyIfNotExists -DisplayName 'DLP-001-2606-Allow-AllApps-AllUsers-Phishi
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = $chcAppFilter
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
     }
     GrantControls = @{
         Operator               = 'OR'
@@ -587,7 +822,7 @@ New-CAPolicyIfNotExists -DisplayName 'DLP-002-2606-Block-AllApps-AllUsers-Requir
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = $chcAppFilter
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         Devices      = @{
             deviceFilter = @{
                 mode = 'exclude'
@@ -604,7 +839,7 @@ New-CAPolicyIfNotExists -DisplayName 'DLP-003-2606-Block-AllApps-AllUsers-AllowS
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = $chcAppFilter
-        Users        = @{ includeUsers = 'All'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'All'; excludeUsers = $breakGlassAllIds }
         Locations    = @{ includeLocations = 'All'; excludeLocations = $chcAllowedCountriesId }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -616,7 +851,7 @@ New-CAPolicyIfNotExists -DisplayName 'DLP-004-2606-Block-AllApps-Guests-AccessTo
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = $chcAppFilter
-        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = $breakGlassAllIds }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
 }
@@ -628,7 +863,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-001-2606-Allow-AllApps-Admins-Phishing
     Conditions    = @{
         Applications = @{ includeApplications = 'All' }
         Users        = @{
-            excludeUsers  = @($breakGlass1Id, $breakGlass2Id)
+            excludeUsers  = $breakGlassAllIds
             includeGroups = @($secureGroupId)
             includeRoles  = $adminRoleIds
         }
@@ -654,7 +889,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-002-2606-Block-AllApps-Admins-AllowSpe
             includeApplications = 'All'
             excludeApplications = $per002ExcludeApps
         }
-        Users        = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Users        = @{ excludeUsers = $breakGlassAllIds; includeRoles = $adminRoleIds }
         Locations    = @{ includeLocations = 'All'; excludeLocations = $adminAllowedCountriesId }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -666,7 +901,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-003-2606-Block-AllApps-Admins-HighSign
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications     = @{ includeApplications = 'All' }
-        Users            = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Users            = @{ excludeUsers = $breakGlassAllIds; includeRoles = $adminRoleIds }
         signInRiskLevels = @('high')
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -678,7 +913,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-004-2606-Block-AllApps-Admins-HighUser
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications   = @{ includeApplications = 'All' }
-        Users          = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Users          = @{ excludeUsers = $breakGlassAllIds; includeRoles = $adminRoleIds }
         userRiskLevels = @('high')
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -690,7 +925,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-005-2606-Block-AllApps-Admins-RequireC
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = @{ includeApplications = 'All' }
-        Users        = @{ excludeUsers = @($breakGlass1Id, $breakGlass2Id); includeRoles = $adminRoleIds }
+        Users        = @{ excludeUsers = $breakGlassAllIds; includeRoles = $adminRoleIds }
         Devices      = @{ deviceFilter = @{ mode = 'exclude'; rule = 'device.isCompliant -eq True' } }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
@@ -703,7 +938,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-006-2606-Block-AllApps-Admins-RequireS
     Conditions    = @{
         Applications = @{ includeApplications = 'All' }
         Users        = @{
-            excludeUsers  = @($breakGlass1Id, $breakGlass2Id)
+            excludeUsers  = $breakGlassAllIds
             includeGroups = @($secureGroupId)
             includeRoles  = $adminRoleIds
         }
@@ -766,7 +1001,7 @@ if ($script:existingPolicies.DisplayName -contains $per008Name) {
             applications     = @{ includeApplications = @('All') }
             users            = @{
                 includeUsers = @('All')
-                excludeUsers = @($breakGlass1Id, $breakGlass2Id)
+                excludeUsers = $breakGlassAllIds
             }
             clientAppTypes   = @('all')
             signInRiskLevels = @('high')
@@ -814,7 +1049,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-009-2606-Block-AllApps-Externals-Requi
             includeApplications = 'All'
             excludeApplications = @('0af06dc6-e4b5-4f28-818e-e78e62d137a5')  # Approved VDI/AVD application
         }
-        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = $breakGlassAllIds }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
 }
@@ -825,7 +1060,7 @@ New-CAPolicyIfNotExists -DisplayName 'PER-010-2606-Block-AdminPortals-Guests-Adm
     State         = 'EnabledForReportingButNotEnforced'
     Conditions    = @{
         Applications = @{ includeApplications = 'MicrosoftAdminPortals' }
-        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = @($breakGlass1Id, $breakGlass2Id) }
+        Users        = @{ includeUsers = 'GuestsOrExternalUsers'; excludeUsers = $breakGlassAllIds }
     }
     GrantControls = @{ BuiltInControls = @('block'); Operator = 'OR' }
 }
